@@ -1,0 +1,86 @@
+// ============================================================
+// SCREENER: Vigía10 Pre-Breakout v2.0
+// Penny/Micro stocks NYSE/NASDAQ - Daily
+// Filosofía: todo suma, nada bloquea. Los tipo 4 óptimos
+// flotan arriba; los débiles aparecen abajo pero no se descartan.
+// ============================================================
+
+// --- HARD GATES (precio y liquidez mínima) ---
+volMedia20 = average[20](volume)
+dolarVol   = close * volMedia20
+baseOk     = close >= 1 AND close <= 10 AND dolarVol >= 1000000
+
+// --- VIGÍA10 ---
+ignored, ignored, ignored, ignored, ignored, ignored, sv, mr = CALL "Blai5 VIGIA 10"
+filtro = ExponentialAverage[50](sv)
+astro  = sv - mr
+
+// --- CONDICIONES BÁSICAS ---
+svSubiendo  = sv > sv[1] AND sv[1] >= sv[3]
+svConFuerza = (sv - sv[1]) >= (sv[1] - sv[2])
+
+// --- COMPRESIÓN PREVIA (sv) ---
+amplitudReciente = highest[5](sv) - lowest[5](sv)
+amplitudPrevia   = highest[15](sv[5]) - lowest[15](sv[5])
+postSqueeze = amplitudPrevia <= 15 AND amplitudReciente >= amplitudPrevia * 1.2
+
+// --- SQUEEZE POR ATR (más robusto que solo sv) ---
+atr14      = AverageTrueRange[14]
+atrMedio   = average[20](atr14)
+atrSqueeze = atr14 < atrMedio * 0.85
+
+// --- TIPOS DE SEÑAL ---
+tipoB = sv > 0 AND sv[3] <= 0 AND svSubiendo
+tipoA = sv < 0 AND sv > -5 AND sv > mr AND svSubiendo AND NOT tipoB
+tipoC = sv > 0 AND mr > 0 AND filtro > 0 AND NOT tipoB
+tipoD = filtro < 0 AND (filtro - filtro[3]) > (sv - sv[3]) AND filtro > filtro[3] AND sv < 0 AND svSubiendo AND NOT tipoA AND NOT tipoB
+
+haySenal = tipoA OR tipoB OR tipoC OR tipoD
+
+// --- SCORING BASE (tipo de señal) ---
+s1 = tipoB * 40 + tipoA * 25 + tipoC * 15 + tipoD * 10
+
+// --- SCORING VIGÍA (indicadores internos) ---
+s2 = (filtro > 0) * 15
+s3 = (astro > 0 AND astro[3] <= 0) * 15
+s4 = (mr > 0) * 10
+s5 = svConFuerza * 10
+s6 = (astro > 0) * 8
+s7 = (filtro > filtro[3]) * 5
+s8 = postSqueeze * 12
+
+// --- FRESCURA DEL CRUCE tipo 4 ---
+// El cruce de sv a cero es la señal; cuanto más reciente, más válida
+// cruceHoy: sv pasó de <= 0 a > 0 en esta misma barra
+// cruceReciente: el cruce fue en la barra anterior
+s9  = tipoB * (sv[1] <= 0) * 15
+s10 = tipoB * (sv[1] > 0 AND sv[2] <= 0) * 8
+// Si el cruce fue hace 3 barras no suma nada extra (ya incluido en s1)
+
+// --- VOLUMEN RELATIVO ---
+// Confirma que hay interés real detrás del movimiento
+volRel       = volume / average[20](volume)
+s11 = (volRel >= 1.5) * 15
+s12 = (volRel >= 1.2 AND volRel < 1.5) * 8
+
+// --- PRICE ACTION ---
+// Vela alcista: cierre por encima de la apertura
+s13 = (close > open) * 8
+// Ruptura de rango: el precio supera el máximo de los últimos 10 días
+s14 = (close > highest[10](close[1])) * 12
+
+// --- ATR SQUEEZE ---
+// La acción viene de una fase comprimida; más energía acumulada
+s15 = atrSqueeze * 10
+
+// --- SCORE TOTAL ---
+score = s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14 + s15
+
+// --- TIPO LEGIBLE ---
+tipoNum = tipoB * 4 + tipoA * 3 + tipoC * 2 + tipoD * 1
+
+// --- CONDICIÓN FINAL ---
+scoreOrden = tipoNum * 1000 + score
+condicion  = baseOk AND svSubiendo AND haySenal AND score >= 65
+
+SCREENER[scoreOrden * condicion](tipoNum,score,sv,mr,filtro,close,volRel)
