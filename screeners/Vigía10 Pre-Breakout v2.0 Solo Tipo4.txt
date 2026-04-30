@@ -1,0 +1,99 @@
+// ============================================================
+// SCREENER: Vigía10 Pre-Breakout v2.0 - Solo Tipo 4
+// Penny/Micro stocks NYSE/NASDAQ - Daily
+// Filosofía: solo cruces de sv a cero. Todo suma, nada bloquea.
+// Los cruces óptimos flotan arriba; los débiles aparecen abajo.
+// ============================================================
+
+// --- HARD GATES (precio y liquidez mínima) ---
+volMedia20 = average[20](volume)
+dolarVol   = close * volMedia20
+baseOk     = close >= 1 AND close <= 10 AND dolarVol >= 1000000
+
+// --- VIGÍA10 ---
+ignored, ignored, ignored, ignored, ignored, ignored, sv, mr = CALL "Blai5 VIGIA 10"
+filtro = ExponentialAverage[50](sv)
+astro  = sv - mr
+
+// --- CONDICIONES BÁSICAS ---
+svSubiendo  = sv > sv[1] AND sv[1] >= sv[3]
+svConFuerza = (sv - sv[1]) >= (sv[1] - sv[2])
+
+// --- TIPO 4: cruce de sv a cero ---
+tipoB = sv > 0 AND sv[3] <= 0 AND svSubiendo
+
+// --- COMPRESIÓN PREVIA (sv) ---
+amplitudReciente = highest[5](sv) - lowest[5](sv)
+amplitudPrevia   = highest[15](sv[5]) - lowest[15](sv[5])
+postSqueeze = amplitudPrevia <= 15 AND amplitudReciente >= amplitudPrevia * 1.2
+
+// --- SQUEEZE POR ATR ---
+atr14      = AverageTrueRange[14]
+atrMedio   = average[20](atr14)
+atrSqueeze = atr14 < atrMedio * 0.85
+
+// --- EMA20 PRECIO ---
+ema20 = ExponentialAverage[20](close)
+
+// ============================================================
+// SCORING — todo suma, nada bloquea
+// ============================================================
+
+// --- BASE TIPO 4 ---
+s1 = 40
+
+// --- SCORING VIGÍA (indicadores internos) ---
+s2 = (filtro > 0) * 15
+s3 = (astro > 0 AND astro[3] <= 0) * 15
+s4 = (mr > 0) * 10
+s5 = svConFuerza * 10
+s6 = (astro > 0) * 8
+s7 = (filtro > filtro[3]) * 5
+s8 = postSqueeze * 12
+
+// --- FRESCURA DEL CRUCE ---
+// Cruce de hoy: sv pasó de <= 0 a > 0 en esta barra
+s9  = (sv[1] <= 0) * 15
+// Cruce de ayer: pasó a positivo una barra antes
+s10 = (sv[1] > 0 AND sv[2] <= 0) * 8
+// Cruce hace 3 barras: no suma extra (ya en s1)
+
+// --- PROFUNDIDAD DEL SWING PREVIO ---
+// Cuanto más negativo estuvo sv antes del cruce, más potente la reversión
+svMinPrevio = lowest[15](sv[1])
+s11 = (svMinPrevio < -15) * 12
+s12 = (svMinPrevio >= -15 AND svMinPrevio < -5) * 6
+
+// --- IMPULSO DEL CRUCE ---
+// sv claramente positivo desde el primer día, no apenas rozando cero
+s13 = (sv > 3) * 8
+
+// --- mr GIRANDO AL ALZA ---
+// mr también en tendencia ascendente, no solo su nivel absoluto
+s14 = (mr > mr[3]) * 8
+
+// --- VOLUMEN RELATIVO ---
+volRel = volume / average[20](volume)
+s15 = (volRel >= 1.5) * 15
+s16 = (volRel >= 1.2 AND volRel < 1.5) * 8
+
+// --- PRICE ACTION ---
+// Vela alcista
+s17 = (close > open) * 8
+// Precio rompe rango de 10 días
+s18 = (close > highest[10](close[1])) * 12
+// Precio por encima de EMA20 (tendencia corta favorable)
+s19 = (close > ema20) * 10
+
+// --- ATR SQUEEZE ---
+s20 = atrSqueeze * 10
+
+// --- SCORE TOTAL ---
+score = s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14 + s15 + s16 + s17 + s18 + s19 + s20
+
+// --- CONDICIÓN FINAL ---
+// Umbral 60 (vs 65 en versión multi-tipo): ya filtramos por tipo 4,
+// así no perdemos cruces tempranos donde filtro aún no giró
+condicion = baseOk AND svSubiendo AND tipoB AND score >= 60
+
+SCREENER[score * condicion](score,sv,mr,filtro,close,volRel,svMinPrevio)
