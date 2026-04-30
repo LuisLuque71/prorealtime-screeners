@@ -1,0 +1,85 @@
+// EMA + ICHIMOKU CONFLUENCE SCREENER - ProRealTime
+
+volmin = 500000
+maxdist = 2.0
+
+// --- EMAs ---
+emaswing = ExponentialAverage[21](Close)
+ematrend = ExponentialAverage[50](Close)
+emalong  = ExponentialAverage[200](Close)
+
+// --- ICHIMOKU ---
+tenkan  = (Highest[9](High)  + Lowest[9](Low))  / 2
+kijun   = (Highest[26](High) + Lowest[26](Low)) / 2
+senkoua = (tenkan + kijun) / 2
+senkoud = (Highest[52](High) + Lowest[52](Low)) / 2
+
+nubea = senkoua[26]
+nubeb = senkoud[26]
+
+// --- VOLUMEN ---
+volmed = Average[20](Volume)
+
+// --- DISTANCIAS ---
+distema  = Abs(Close - emaswing)  / emaswing  * 100
+distkij  = Abs(Close - kijun)     / kijun     * 100
+
+// =====================
+// SCORING EMA (0-50 pts)
+// =====================
+emascore = 0
+
+IF Close > emalong THEN
+emascore = emascore + 15
+ENDIF
+IF emaswing > ematrend THEN
+emascore = emascore + 10
+ENDIF
+IF Close > ematrend THEN
+emascore = emascore + 10
+ENDIF
+IF distema < maxdist THEN
+emascore = emascore + (10 - (distema / maxdist) * 10)
+ENDIF
+IF Volume < volmed THEN
+emascore = emascore + 5
+ENDIF
+IF Close > Open THEN
+emascore = emascore + 5
+ENDIF
+
+// ==========================
+// SCORING ICHIMOKU (0-50 pts)
+// ==========================
+ichiscore = 0
+
+IF Close > nubea AND Close > nubeb THEN
+ichiscore = ichiscore + 15
+ENDIF
+IF nubea > nubeb THEN
+ichiscore = ichiscore + 10
+ENDIF
+IF tenkan > kijun THEN
+ichiscore = ichiscore + 8
+ENDIF
+IF Close > kijun THEN
+ichiscore = ichiscore + 10
+ENDIF
+IF distkij < maxdist THEN
+ichiscore = ichiscore + (7 - (distkij / maxdist) * 7)
+ENDIF
+
+// ==========================
+// SCORE TOTAL (0-100 pts)
+// ==========================
+score = emascore + ichiscore
+
+// Filtros de calidad
+IF Close < 10 THEN
+score = 0
+ENDIF
+IF Volume < volmin THEN
+score = 0
+ENDIF
+
+SCREENER[score >= 95](score AS "Score")

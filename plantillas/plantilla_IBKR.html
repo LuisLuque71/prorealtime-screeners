@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plantilla IBKR</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --surface: #1e2535;
+  --border-form: #2a3348;
+  --text-form: #e8ecf4;
+  --muted-form: #7a8299;
+  --dim-form: #3a4258;
+  --green-form: #2ecc7a;
+  --red-form: #e85050;
+  /* IBKR phone colors */
+  --ibkr-bg: #ffffff;
+  --ibkr-card: #f5f6f8;
+  --ibkr-border: #e2e4e8;
+  --ibkr-text: #0a0e1a;
+  --ibkr-label: #888c99;
+  --ibkr-green: #00875a;
+  --ibkr-red: #cc2200;
+  --ibkr-blue: #1a56db;
+  --ibkr-nav-active: #1a56db;
+}
+body {
+  background: #0a0d14;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  color: var(--text-form);
+  min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 28px 12px 48px; gap: 28px;
+}
+
+/* ── FORM PANEL ── */
+.panel {
+  width: 100%; max-width: 860px;
+  background: var(--surface);
+  border: 1px solid var(--border-form);
+  border-radius: 18px; overflow: hidden;
+}
+.panel-head {
+  padding: 16px 22px; border-bottom: 1px solid var(--border-form);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.panel-head h2 { font-size: 14px; font-weight: 700; color: var(--ibkr-blue); letter-spacing: .05em; text-transform: uppercase; }
+.panel-body { padding: 20px 22px; }
+
+.section-title {
+  font-size: 10.5px; font-weight: 700; color: var(--dim-form);
+  text-transform: uppercase; letter-spacing: .08em;
+  margin-bottom: 12px; margin-top: 22px;
+}
+.section-title:first-child { margin-top: 0; }
+
+.pos-section-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 22px; margin-bottom: 12px;
+}
+.pos-section-head .section-title { margin: 0; }
+.pos-toggle {
+  font-size: 11px; font-weight: 700; padding: 4px 14px;
+  border-radius: 20px; border: 1px solid var(--border-form);
+  cursor: pointer; color: var(--muted-form); background: transparent; transition: all .15s;
+}
+.pos-toggle.on { background: var(--ibkr-blue); color: #fff; border-color: var(--ibkr-blue); }
+.pos-fields.hidden { display: none; }
+
+.field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(185px,1fr)); gap: 10px; }
+.field-grid.two { grid-template-columns: 1fr 1fr; }
+.field-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+.field-grid.four { grid-template-columns: 1fr 1fr 1fr 1fr; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 10.5px; font-weight: 600; color: var(--muted-form); text-transform: uppercase; letter-spacing: .04em; }
+.field input[type="text"] {
+  background: #0d1321; border: 1px solid var(--border-form);
+  border-radius: 8px; color: var(--text-form);
+  font-size: 13.5px; font-weight: 500;
+  padding: 8px 11px; outline: none;
+  transition: border-color .15s; width: 100%;
+}
+.field input:focus { border-color: var(--ibkr-blue); }
+
+.color-row { display: flex; gap: 8px; align-items: center; }
+.color-row input { flex: 1; }
+.color-toggle { display: flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-form); flex-shrink: 0; }
+.color-btn { padding: 7px 10px; font-size: 12px; font-weight: 700; cursor: pointer; border: none; background: transparent; color: var(--dim-form); transition: all .15s; }
+.color-btn.g.active { background: #00875a; color: #fff; }
+.color-btn.r.active { background: #cc2200; color: #fff; }
+.color-btn.n.active { background: #3a4a6a; color: var(--text-form); }
+
+.actions { display: flex; gap: 10px; margin-top: 22px; }
+.btn { flex: 1; padding: 12px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; border: none; transition: opacity .15s; }
+.btn:hover { opacity: .88; }
+.btn-secondary { background: #1e2840; color: var(--text-form); }
+.btn-dl { background: #1e2840; color: var(--ibkr-blue); border: 1px solid var(--ibkr-blue); }
+
+/* ── PHONE ── */
+.preview-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.preview-label { font-size: 10.5px; font-weight: 700; color: var(--dim-form); text-transform: uppercase; letter-spacing: .08em; }
+
+.phone {
+  width: 375px;
+  background: var(--ibkr-bg);
+  border-radius: 38px; overflow: hidden;
+  box-shadow: 0 0 0 1px #ccc, 0 24px 60px rgba(0,0,0,.35);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+}
+
+/* Status bar */
+.status-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 20px 4px; font-size: 13px; font-weight: 600; color: #0a0e1a;
+  background: var(--ibkr-bg);
+}
+.status-right { display: flex; align-items: center; gap: 5px; }
+
+/* Top nav */
+.topnav {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 18px 12px; background: var(--ibkr-bg);
+}
+.topnav-left { display: flex; align-items: center; gap: 14px; }
+.topnav-title { font-size: 20px; font-weight: 700; color: var(--ibkr-text); }
+.topnav-right { display: flex; gap: 14px; align-items: center; }
+
+/* Card */
+.ibkr-card {
+  margin: 0 12px 10px;
+  background: #fff;
+  border: 1px solid var(--ibkr-border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+
+/* Hero block */
+.hero-block {
+  padding: 16px 16px 12px;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  border-bottom: 1px solid var(--ibkr-border);
+}
+.hero-left {}
+.hero-val { font-size: 26px; font-weight: 800; color: var(--ibkr-text); letter-spacing: -.5px; }
+.hero-sub { font-size: 13px; font-weight: 600; color: var(--ibkr-green); margin-top: 3px; }
+.hero-sub.r { color: var(--ibkr-red); }
+.hero-right { text-align: right; }
+.hero-pyg-val { font-size: 16px; font-weight: 700; color: var(--ibkr-green); }
+.hero-pyg-val.r { color: var(--ibkr-red); }
+.hero-pyg-label { font-size: 11px; color: var(--ibkr-label); margin-top: 4px; }
+
+/* Stats rows */
+.stats-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+  padding: 10px 16px; border-bottom: 1px solid var(--ibkr-border);
+  gap: 8px;
+}
+.stat-item {}
+.stat-lbl { font-size: 9px; font-weight: 600; color: var(--ibkr-label); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; }
+.stat-v { font-size: 13.5px; font-weight: 600; color: var(--ibkr-text); }
+.stat-v.dash { color: var(--ibkr-label); }
+
+/* Tabs */
+.ibkr-tabs { display: flex; padding: 0 16px; border-bottom: 1px solid var(--ibkr-border); gap: 18px; }
+.ibkr-tab { font-size: 13px; font-weight: 600; color: var(--ibkr-label); padding: 10px 0; position: relative; white-space: nowrap; }
+.ibkr-tab.active { color: var(--ibkr-text); font-weight: 700; }
+.ibkr-tab.active::after { content:''; position:absolute; bottom:0; left:0; right:0; height:2.5px; background:var(--ibkr-blue); border-radius:2px 2px 0 0; }
+
+/* Position header */
+.pos-hdr {
+  display: grid; grid-template-columns: 1.8fr 1fr 1fr 1fr 1fr;
+  padding: 6px 16px 6px; border-bottom: 1px solid var(--ibkr-border);
+  gap: 4px;
+}
+.ph { font-size: 9.5px; font-weight: 700; color: var(--ibkr-label); text-transform: uppercase; letter-spacing: .03em; }
+.ph:not(:first-child) { text-align: right; }
+
+/* Position row */
+.pos-row {
+  display: grid; grid-template-columns: 1.8fr 1fr 1fr 1fr 1fr;
+  padding: 12px 16px; gap: 4px; align-items: center;
+  border-bottom: 1px solid var(--ibkr-border);
+}
+.pos-row.hidden { display: none; }
+.pos-ticker { font-size: 15px; font-weight: 800; color: var(--ibkr-text); }
+.pos-exchange { font-size: 10px; color: var(--ibkr-label); font-weight: 500; margin-top: 2px; }
+.pos-num { font-size: 13.5px; font-weight: 600; color: var(--ibkr-text); text-align: right; }
+.pos-num.g { color: var(--ibkr-green); }
+.pos-num.r { color: var(--ibkr-red); }
+
+/* Saldos */
+.saldos-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 16px 8px;
+}
+.saldos-title { font-size: 14px; font-weight: 500; color: var(--ibkr-label); }
+.saldo-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 16px; border-top: 1px solid var(--ibkr-border);
+}
+.saldo-label { font-size: 13.5px; font-weight: 500; color: var(--ibkr-text); }
+.saldo-val-wrap { display: flex; align-items: baseline; gap: 5px; }
+.saldo-val { font-size: 13.5px; font-weight: 700; }
+.saldo-val.g { color: var(--ibkr-green); }
+.saldo-val.r { color: var(--ibkr-red); }
+.saldo-tag { font-size: 10px; color: var(--ibkr-label); }
+
+.gfis { padding: 10px 16px 14px; font-size: 10px; color: var(--ibkr-label); display: flex; align-items: center; gap: 5px; }
+.gfis-logo { font-size: 10px; font-weight: 700; color: #e65c00; }
+
+/* Bottom nav */
+.bottomnav {
+  display: flex; border-top: 1px solid var(--ibkr-border);
+  padding: 10px 0 18px; background: var(--ibkr-bg);
+}
+.nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; color: #999; font-size: 10px; font-weight: 500; }
+.nav-item.active { color: var(--ibkr-nav-active); }
+</style>
+</head>
+<body>
+
+<!-- ══════════ FORM ══════════ -->
+<div class="panel">
+  <div class="panel-head">
+    <h2>🖊 Plantilla IBKR</h2>
+    <span style="font-size:11px;color:var(--dim-form)">Vista previa en tiempo real</span>
+  </div>
+  <div class="panel-body">
+
+    <!-- GENERAL -->
+    <div class="section-title">General</div>
+    <div class="field-grid three">
+      <div class="field"><label>Hora</label><input type="text" id="f-time" value="20:44" oninput="render()"></div>
+      <div class="field"><label>Valor total (hero)</label><input type="text" id="f-hero" value="$54.1K" oninput="render()"></div>
+      <div class="field"><label>PyG realizadas $</label>
+        <div class="color-row">
+          <input type="text" id="f-pygrval" value="+$120 (+1.2%)" oninput="render()">
+          <div class="color-toggle">
+            <button class="color-btn g active" onclick="setColor('pygrval','g',this)">▲</button>
+            <button class="color-btn r" onclick="setColor('pygrval','r',this)">▼</button>
+            <button class="color-btn n" onclick="setColor('pygrval','n',this)">–</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="field-grid two" style="margin-top:10px">
+      <div class="field"><label>Variación $ y % (bajo hero)</label>
+        <div class="color-row">
+          <input type="text" id="f-herosub" value="+0.3K (+1.8%)" oninput="render()">
+          <div class="color-toggle">
+            <button class="color-btn g active" onclick="setColor('herosub','g',this)">▲</button>
+            <button class="color-btn r" onclick="setColor('herosub','r',this)">▼</button>
+            <button class="color-btn n" onclick="setColor('herosub','n',this)">–</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="section-title">Estadísticas cartera</div>
+    <div class="field-grid four">
+      <div class="field"><label>Valor de Mercado</label><input type="text" id="f-mercado" value="$54K" oninput="render()"></div>
+      <div class="field"><label>Exceso Liq.</label><input type="text" id="f-exceso" value="49K" oninput="render()"></div>
+      <div class="field"><label>Gestión de Mant.</label><input type="text" id="f-gestion" value="52.7K" oninput="render()"></div>
+      <div class="field"><label>Poder Adquisitivo</label><input type="text" id="f-poder" value="71K" oninput="render()"></div>
+    </div>
+    <div class="field-grid two" style="margin-top:10px">
+      <div class="field"><label>SPX Delta</label><input type="text" id="f-spx" value="7.5K" oninput="render()"></div>
+    </div>
+
+    <!-- POSICIÓN 1 -->
+    <div class="section-title">Posición 1</div>
+    <div class="field-grid four">
+      <div class="field"><label>Ticker</label><input type="text" id="f-1-ticker" value="JYD" oninput="render()"></div>
+      <div class="field"><label>Bolsa</label><input type="text" id="f-1-exch" value="NASDAQ" oninput="render()"></div>
+      <div class="field"><label>Último $</label><input type="text" id="f-1-ultimo" value="4.12" oninput="render()"></div>
+      <div class="field"><label>PSCÓN</label><input type="text" id="f-1-pscon" value="900" oninput="render()"></div>
+    </div>
+    <div class="field-grid two" style="margin-top:10px">
+      <div class="field"><label>PyG $</label>
+        <div class="color-row">
+          <input type="text" id="f-1-pyg" value="0.3K" oninput="render()">
+          <div class="color-toggle">
+            <button class="color-btn g active" onclick="setColor('1-pyg','g',this)">▲</button>
+            <button class="color-btn r" onclick="setColor('1-pyg','r',this)">▼</button>
+            <button class="color-btn n" onclick="setColor('1-pyg','n',this)">–</button>
+          </div>
+        </div>
+      </div>
+      <div class="field"><label>PyG RLZD$</label>
+        <div class="color-row">
+          <input type="text" id="f-1-rlzd" value="1.2%" oninput="render()">
+          <div class="color-toggle">
+            <button class="color-btn g active" onclick="setColor('1-rlzd','g',this)">▲</button>
+            <button class="color-btn r" onclick="setColor('1-rlzd','r',this)">▼</button>
+            <button class="color-btn n" onclick="setColor('1-rlzd','n',this)">–</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POSICIÓN 2 -->
+    <div class="pos-section-head">
+      <div class="section-title">Posición 2</div>
+      <button class="pos-toggle" id="toggle-2" onclick="togglePos(2)">+ Activar</button>
+    </div>
+    <div class="pos-fields hidden" id="fields-2">
+      <div class="field-grid four">
+        <div class="field"><label>Ticker</label><input type="text" id="f-2-ticker" value="" oninput="render()" placeholder="SMR"></div>
+        <div class="field"><label>Bolsa</label><input type="text" id="f-2-exch" value="" oninput="render()" placeholder="NYSE"></div>
+        <div class="field"><label>Último $</label><input type="text" id="f-2-ultimo" value="" oninput="render()" placeholder="10.80"></div>
+        <div class="field"><label>PSCÓN</label><input type="text" id="f-2-pscon" value="" oninput="render()" placeholder="1.36K"></div>
+      </div>
+      <div class="field-grid two" style="margin-top:10px">
+        <div class="field"><label>PyG $</label>
+          <div class="color-row">
+            <input type="text" id="f-2-pyg" value="" oninput="render()" placeholder="755.36">
+            <div class="color-toggle">
+              <button class="color-btn g active" onclick="setColor('2-pyg','g',this)">▲</button>
+              <button class="color-btn r" onclick="setColor('2-pyg','r',this)">▼</button>
+              <button class="color-btn n" onclick="setColor('2-pyg','n',this)">–</button>
+            </div>
+          </div>
+        </div>
+        <div class="field"><label>PyG RLZD$</label>
+          <div class="color-row">
+            <input type="text" id="f-2-rlzd" value="" oninput="render()" placeholder="-20.3%">
+            <div class="color-toggle">
+              <button class="color-btn g active" onclick="setColor('2-rlzd','g',this)">▲</button>
+              <button class="color-btn r" onclick="setColor('2-rlzd','r',this)">▼</button>
+              <button class="color-btn n" onclick="setColor('2-rlzd','n',this)">–</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POSICIÓN 3 -->
+    <div class="pos-section-head">
+      <div class="section-title">Posición 3</div>
+      <button class="pos-toggle" id="toggle-3" onclick="togglePos(3)">+ Activar</button>
+    </div>
+    <div class="pos-fields hidden" id="fields-3">
+      <div class="field-grid four">
+        <div class="field"><label>Ticker</label><input type="text" id="f-3-ticker" value="" oninput="render()" placeholder="IREN"></div>
+        <div class="field"><label>Bolsa</label><input type="text" id="f-3-exch" value="" oninput="render()" placeholder="NASDAQ"></div>
+        <div class="field"><label>Último $</label><input type="text" id="f-3-ultimo" value="" oninput="render()" placeholder="48.20"></div>
+        <div class="field"><label>PSCÓN</label><input type="text" id="f-3-pscon" value="" oninput="render()" placeholder="1.0K"></div>
+      </div>
+      <div class="field-grid two" style="margin-top:10px">
+        <div class="field"><label>PyG $</label>
+          <div class="color-row">
+            <input type="text" id="f-3-pyg" value="" oninput="render()" placeholder="+214">
+            <div class="color-toggle">
+              <button class="color-btn g active" onclick="setColor('3-pyg','g',this)">▲</button>
+              <button class="color-btn r" onclick="setColor('3-pyg','r',this)">▼</button>
+              <button class="color-btn n" onclick="setColor('3-pyg','n',this)">–</button>
+            </div>
+          </div>
+        </div>
+        <div class="field"><label>PyG RLZD$</label>
+          <div class="color-row">
+            <input type="text" id="f-3-rlzd" value="" oninput="render()" placeholder="+0.3%">
+            <div class="color-toggle">
+              <button class="color-btn g active" onclick="setColor('3-rlzd','g',this)">▲</button>
+              <button class="color-btn r" onclick="setColor('3-rlzd','r',this)">▼</button>
+              <button class="color-btn n" onclick="setColor('3-rlzd','n',this)">–</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SALDOS -->
+    <div class="section-title">Saldos en efectivo</div>
+    <div class="field-grid three">
+      <div class="field"><label>EUR Efectivo</label>
+        <div class="color-row">
+          <input type="text" id="f-eur" value="4.65K" oninput="render()">
+          <div class="color-toggle">
+            <button class="color-btn g active" onclick="setColor('eur','g',this)">▲</button>
+            <button class="color-btn r" onclick="setColor('eur','r',this)">▼</button>
+            <button class="color-btn n" onclick="setColor('eur','n',this)">–</button>
+          </div>
+        </div>
+      </div>
+      <div class="field"><label>USD Efectivo</label>
+        <div class="color-row">
+          <input type="text" id="f-usd" value="-13.9K" oninput="render()">
+          <div class="color-toggle">
+            <button class="color-btn g active" onclick="setColor('usd','g',this)">▲</button>
+            <button class="color-btn r" onclick="setColor('usd','r',this)">▼</button>
+            <button class="color-btn n" onclick="setColor('usd','n',this)">–</button>
+          </div>
+        </div>
+      </div>
+      <div class="field"><label>Total efectivo</label>
+        <div class="color-row">
+          <input type="text" id="f-total" value="-9.25K" oninput="render()">
+          <div class="color-toggle">
+            <button class="color-btn g active" onclick="setColor('total','g',this)">▲</button>
+            <button class="color-btn r" onclick="setColor('total','r',this)">▼</button>
+            <button class="color-btn n" onclick="setColor('total','n',this)">–</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-secondary" onclick="resetForm()">↺ Reset</button>
+      <button class="btn btn-dl" onclick="downloadTicket()">⬇ Descargar PNG</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════ PREVIEW ══════════ -->
+<div class="preview-wrap">
+  <div class="preview-label">Vista previa</div>
+
+  <div class="phone" id="ticket">
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <span style="font-weight:700" id="p-time">20:44</span>
+      <div class="status-right">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0a0e1a" stroke-width="2"><polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/></svg>
+        <svg width="16" height="12" viewBox="0 0 20 14" fill="#0a0e1a"><rect x="0" y="8" width="3" height="6" rx="1"/><rect x="4.5" y="5" width="3" height="9" rx="1"/><rect x="9" y="2" width="3" height="12" rx="1"/><rect x="13.5" y="0" width="3" height="14" rx="1"/></svg>
+        <svg width="15" height="12" viewBox="0 0 22 16" fill="#0a0e1a"><path d="M11 12.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm0-4a6.5 6.5 0 0 1 4.6 1.9l-1.4 1.4A4.5 4.5 0 0 0 11 10.5a4.5 4.5 0 0 0-3.2 1.3L6.4 10.4A6.5 6.5 0 0 1 11 8.5zm0-4a11 11 0 0 1 7.8 3.2L17.4 9.1A9 9 0 0 0 11 6.5 9 9 0 0 0 4.6 9.1L3.2 7.7A11 11 0 0 1 11 4.5zm0-4A15.5 15.5 0 0 1 22 4.9L20.6 6.3A13.5 13.5 0 0 0 11 2.5 13.5 13.5 0 0 0 1.4 6.3L0 4.9A15.5 15.5 0 0 1 11 .5z"/></svg>
+        <svg width="24" height="12" viewBox="0 0 28 13" fill="none" stroke="#0a0e1a" stroke-width="1.5"><rect x="1" y="1" width="22" height="11" rx="2.5"/><rect x="23" y="4" width="4" height="5" rx="1.5" fill="#0a0e1a" stroke="none"/><rect x="2.5" y="2.5" width="17" height="8" rx="1.5" fill="#0a0e1a" stroke="none"/><text x="5" y="10" font-size="7" fill="#fff" font-weight="700" font-family="sans-serif">45</text></svg>
+      </div>
+    </div>
+
+    <!-- Top nav -->
+    <div class="topnav">
+      <div class="topnav-left">
+        <svg width="20" height="16" viewBox="0 0 22 18" fill="none" stroke="#0a0e1a" stroke-width="2" stroke-linecap="round"><line x1="2" y1="3" x2="20" y2="3"/><line x1="2" y1="9" x2="20" y2="9"/><line x1="2" y1="15" x2="20" y2="15"/></svg>
+        <span class="topnav-title">Cartera</span>
+      </div>
+      <div class="topnav-right">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0a0e1a" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <div style="position:relative">
+          <svg width="20" height="22" viewBox="0 0 24 26" fill="none" stroke="#0a0e1a" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span style="position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;background:#1a56db;border:1.5px solid #fff"></span>
+        </div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0a0e1a" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+      </div>
+    </div>
+
+    <!-- Card -->
+    <div class="ibkr-card">
+
+      <!-- Hero -->
+      <div class="hero-block">
+        <div class="hero-left">
+          <div class="hero-val" id="p-hero">$54.1K</div>
+          <div class="hero-sub g" id="p-herosub">+0.3K (+1.8%)</div>
+        </div>
+        <div class="hero-right">
+          <div class="hero-pyg-val g" id="p-pygrval">+$120 (+1.2%)</div>
+          <div class="hero-pyg-label">PyG realizadas</div>
+        </div>
+      </div>
+
+      <!-- Stats row 1: mercado, exceso, –, – -->
+      <div class="stats-row">
+        <div class="stat-item">
+          <div class="stat-lbl">Valor de Mercado</div>
+          <div class="stat-v" id="p-mercado">$54K</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-lbl">Exceso Liq.</div>
+          <div class="stat-v" id="p-exceso">49K</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-lbl">SMA</div>
+          <div class="stat-v dash">–</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-lbl">THET</div>
+          <div class="stat-v dash">–</div>
+        </div>
+      </div>
+
+      <!-- Stats row 2: gestión, poder, spx, – -->
+      <div class="stats-row">
+        <div class="stat-item">
+          <div class="stat-lbl">Gestión de Mant.</div>
+          <div class="stat-v" id="p-gestion">52.7K</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-lbl">Poder Adquisitivo</div>
+          <div class="stat-v" id="p-poder">71K</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-lbl">SPX Delta</div>
+          <div class="stat-v" id="p-spx">7.5K</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-lbl">VEGA</div>
+          <div class="stat-v dash">–</div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="ibkr-tabs">
+        <div class="ibkr-tab active">Posiciones</div>
+        <div class="ibkr-tab">Saldos</div>
+        <div class="ibkr-tab">Órdenes</div>
+        <div class="ibkr-tab">Impact Lens</div>
+      </div>
+
+      <!-- Pos header -->
+      <div class="pos-hdr">
+        <div class="ph">Instrumento</div>
+        <div class="ph">Último</div>
+        <div class="ph">PSCÓN</div>
+        <div class="ph">PyG</div>
+        <div class="ph">PyG RLZD$</div>
+      </div>
+
+      <!-- Pos 1 -->
+      <div class="pos-row" id="prow-1">
+        <div>
+          <div class="pos-ticker" id="p-1-ticker">JYD</div>
+          <div class="pos-exchange" id="p-1-exch">NASDAQ</div>
+        </div>
+        <div class="pos-num" id="p-1-ultimo">4.12</div>
+        <div class="pos-num" id="p-1-pscon">900</div>
+        <div class="pos-num g" id="p-1-pyg">0.3K</div>
+        <div class="pos-num g" id="p-1-rlzd">1.2%</div>
+      </div>
+
+      <!-- Pos 2 -->
+      <div class="pos-row hidden" id="prow-2">
+        <div>
+          <div class="pos-ticker" id="p-2-ticker"></div>
+          <div class="pos-exchange" id="p-2-exch"></div>
+        </div>
+        <div class="pos-num" id="p-2-ultimo"></div>
+        <div class="pos-num" id="p-2-pscon"></div>
+        <div class="pos-num g" id="p-2-pyg"></div>
+        <div class="pos-num g" id="p-2-rlzd"></div>
+      </div>
+
+      <!-- Pos 3 -->
+      <div class="pos-row hidden" id="prow-3">
+        <div>
+          <div class="pos-ticker" id="p-3-ticker"></div>
+          <div class="pos-exchange" id="p-3-exch"></div>
+        </div>
+        <div class="pos-num" id="p-3-ultimo"></div>
+        <div class="pos-num" id="p-3-pscon"></div>
+        <div class="pos-num g" id="p-3-pyg"></div>
+        <div class="pos-num g" id="p-3-rlzd"></div>
+      </div>
+
+      <!-- Saldos -->
+      <div class="saldos-head">
+        <span class="saldos-title">Saldos en efectivo</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+      </div>
+      <div class="saldo-row">
+        <span class="saldo-label">EUR Efectivo</span>
+        <div class="saldo-val-wrap">
+          <span class="saldo-val g" id="p-eur">4.65K</span>
+          <span class="saldo-tag">(cash_eur)</span>
+        </div>
+      </div>
+      <div class="saldo-row">
+        <span class="saldo-label">USD Efectivo</span>
+        <div class="saldo-val-wrap">
+          <span class="saldo-val r" id="p-usd">-13.9K</span>
+          <span class="saldo-tag">(USD_usd)</span>
+        </div>
+      </div>
+      <div class="saldo-row">
+        <span class="saldo-label">Total efectivo</span>
+        <div class="saldo-val-wrap">
+          <span class="saldo-val r" id="p-total">-9.25K</span>
+          <span class="saldo-tag">(cash_total)</span>
+        </div>
+      </div>
+
+      <div class="gfis">
+        Datos facilitados por.
+        <span class="gfis-logo">▶ GFIS</span>
+      </div>
+
+    </div><!-- /ibkr-card -->
+
+    <!-- Bottom nav -->
+    <div class="bottomnav">
+      <div class="nav-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="10" width="5" height="11" rx="1"/><rect x="9.5" y="6" width="5" height="15" rx="1"/><path d="M16 3h5v18h-5"/></svg>
+        Inicio
+      </div>
+      <div class="nav-item active">
+        <svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#1a56db"/><path d="M12 2 A10 10 0 0 1 22 12 L12 12Z" fill="#fff"/><circle cx="12" cy="12" r="4" fill="#1a56db"/></svg>
+        Cartera
+      </div>
+      <div class="nav-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+        Negociación
+      </div>
+      <div class="nav-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Listas de seg.
+      </div>
+      <div class="nav-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        Mercados
+      </div>
+    </div>
+
+  </div><!-- /phone -->
+</div><!-- /preview-wrap -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+const colorState = {
+  herosub:'g', pygrval:'g',
+  '1-pyg':'g','1-rlzd':'g',
+  '2-pyg':'g','2-rlzd':'g',
+  '3-pyg':'g','3-rlzd':'g',
+  eur:'g', usd:'r', total:'r'
+};
+const posActive = {2:false, 3:false};
+
+const COLOR_MAP = { g:'#00875a', r:'#cc2200', n:'#555' };
+
+function setColor(field, color, btn) {
+  colorState[field] = color;
+  btn.closest('.color-toggle').querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function togglePos(n) {
+  posActive[n] = !posActive[n];
+  const on = posActive[n];
+  document.getElementById('fields-'+n).classList.toggle('hidden', !on);
+  document.getElementById('prow-'+n).classList.toggle('hidden', !on);
+  const btn = document.getElementById('toggle-'+n);
+  btn.textContent = on ? '✕ Desactivar' : '+ Activar';
+  btn.classList.toggle('on', on);
+  render();
+}
+
+function applyColor(elId, value, colorKey) {
+  const el = document.getElementById(elId);
+  el.textContent = value;
+  const c = colorState[colorKey];
+  el.style.color = COLOR_MAP[c] || '#0a0e1a';
+}
+
+function renderPos(n) {
+  const v = id => { const el = document.getElementById('f-'+id); return el ? el.value : ''; };
+  const g = id => document.getElementById(id);
+
+  g(`p-${n}-ticker`).textContent = v(`${n}-ticker`);
+  g(`p-${n}-exch`).textContent   = v(`${n}-exch`);
+  g(`p-${n}-ultimo`).textContent = v(`${n}-ultimo`);
+  g(`p-${n}-pscon`).textContent  = v(`${n}-pscon`);
+
+  applyColor(`p-${n}-pyg`,  v(`${n}-pyg`),  `${n}-pyg`);
+  applyColor(`p-${n}-rlzd`, v(`${n}-rlzd`), `${n}-rlzd`);
+}
+
+function render() {
+  const v = id => document.getElementById('f-'+id).value;
+  const g = id => document.getElementById(id);
+
+  g('p-time').textContent    = v('time');
+  g('p-hero').textContent    = v('hero');
+  g('p-mercado').textContent = v('mercado');
+  g('p-exceso').textContent  = v('exceso');
+  g('p-gestion').textContent = v('gestion');
+  g('p-poder').textContent   = v('poder');
+  g('p-spx').textContent     = v('spx');
+
+  applyColor('p-herosub',  v('herosub'),  'herosub');
+  applyColor('p-pygrval',  v('pygrval'),  'pygrval');
+  applyColor('p-eur',      v('eur'),      'eur');
+  applyColor('p-usd',      v('usd'),      'usd');
+  applyColor('p-total',    v('total'),    'total');
+
+  renderPos(1);
+  if (posActive[2]) renderPos(2);
+  if (posActive[3]) renderPos(3);
+}
+
+function resetForm() {
+  const d = {
+    time:'20:44', hero:'$54.1K', herosub:'+0.3K (+1.8%)', pygrval:'+$120 (+1.2%)',
+    mercado:'$54K', exceso:'49K', gestion:'52.7K', poder:'71K', spx:'7.5K',
+    '1-ticker':'JYD','1-exch':'NASDAQ','1-ultimo':'4.12','1-pscon':'900','1-pyg':'0.3K','1-rlzd':'1.2%',
+    '2-ticker':'','2-exch':'','2-ultimo':'','2-pscon':'','2-pyg':'','2-rlzd':'',
+    '3-ticker':'','3-exch':'','3-ultimo':'','3-pscon':'','3-pyg':'','3-rlzd':'',
+    eur:'4.65K', usd:'-13.9K', total:'-9.25K'
+  };
+  for (const [k,val] of Object.entries(d)) {
+    const el = document.getElementById('f-'+k);
+    if (el) el.value = val;
+  }
+  const defColors = {herosub:'g',pygrval:'g','1-pyg':'g','1-rlzd':'g','2-pyg':'g','2-rlzd':'g','3-pyg':'g','3-rlzd':'g',eur:'g',usd:'r',total:'r'};
+  // reset all toggles to first button (green)
+  document.querySelectorAll('.color-toggle').forEach(tog => {
+    tog.querySelectorAll('.color-btn').forEach((b,i) => b.classList.toggle('active', i===0));
+  });
+  Object.assign(colorState, defColors);
+  [2,3].forEach(n => { if (posActive[n]) togglePos(n); });
+  render();
+}
+
+async function downloadTicket() {
+  const btn = document.querySelector('.btn-dl');
+  btn.textContent = '⏳ Generando...';
+  try {
+    const canvas = await html2canvas(document.getElementById('ticket'), {
+      scale: 3, backgroundColor: '#ffffff', useCORS: true, logging: false
+    });
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = `IBKR_${document.getElementById('f-1-ticker').value||'ticket'}.png`;
+    a.click();
+  } catch(e) { alert('Error al generar imagen'); }
+  btn.textContent = '⬇ Descargar PNG';
+}
+
+render();
+</script>
+</body>
+</html>

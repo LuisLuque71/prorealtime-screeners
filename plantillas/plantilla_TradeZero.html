@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plantilla TradeZero</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f1218;
+  --surface: #141926;
+  --border: #1e2840;
+  --text: #e8ecf4;
+  --muted: #7a8299;
+  --dim: #3a4258;
+  --green: #2ecc7a;
+  --red: #e85050;
+  --phone-bg: #0d1321;
+}
+body {
+  background: #0a0d14;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 12px 48px;
+  gap: 28px;
+}
+
+/* ── PANEL ── */
+.panel {
+  width: 100%; max-width: 840px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px; overflow: hidden;
+}
+.panel-head {
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.panel-head h2 { font-size: 14px; font-weight: 700; color: var(--green); letter-spacing: .05em; text-transform: uppercase; }
+.panel-body { padding: 20px 22px; }
+
+.section-title {
+  font-size: 10.5px; font-weight: 700; color: var(--dim);
+  text-transform: uppercase; letter-spacing: .08em;
+  margin-bottom: 12px; margin-top: 22px;
+}
+.section-title:first-child { margin-top: 0; }
+
+/* position section header with toggle */
+.pos-section-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 22px; margin-bottom: 12px;
+}
+.pos-section-head .section-title { margin: 0; }
+.pos-toggle {
+  font-size: 11px; font-weight: 700; padding: 4px 14px;
+  border-radius: 20px; border: 1px solid var(--border);
+  cursor: pointer; color: var(--muted); background: transparent;
+  transition: all .15s;
+}
+.pos-toggle.on { background: var(--green); color: #0a1018; border-color: var(--green); }
+.pos-fields { display: contents; }
+.pos-fields.hidden { display: none; }
+
+.field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(185px,1fr)); gap: 10px; }
+.field-grid.two { grid-template-columns: 1fr 1fr; }
+.field-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 10.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.field input[type="text"] {
+  background: #0d1321; border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text);
+  font-size: 13.5px; font-weight: 500;
+  padding: 8px 11px; outline: none;
+  transition: border-color .15s; width: 100%;
+}
+.field input:focus { border-color: var(--green); }
+
+.color-row { display: flex; gap: 8px; align-items: center; }
+.color-row input { flex: 1; }
+.color-toggle { display: flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); flex-shrink: 0; }
+.color-btn { padding: 7px 11px; font-size: 12px; font-weight: 700; cursor: pointer; border: none; background: transparent; color: var(--dim); transition: background .15s, color .15s; }
+.color-btn.g.active { background: var(--green); color: #0a1018; }
+.color-btn.r.active { background: var(--red); color: #fff; }
+.color-btn.n.active { background: #3a4a6a; color: var(--text); }
+
+.actions { display: flex; gap: 10px; margin-top: 22px; }
+.btn { flex: 1; padding: 12px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; border: none; transition: opacity .15s; }
+.btn:hover { opacity: .88; }
+.btn-secondary { background: #1e2840; color: var(--text); }
+.btn-dl { background: #1e2840; color: var(--green); border: 1px solid var(--green); }
+
+/* ── PHONE ── */
+.preview-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.preview-label { font-size: 10.5px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; }
+.phone { width: 375px; background: var(--phone-bg); border-radius: 38px; overflow: hidden; box-shadow: 0 0 0 1px #2a3045, 0 32px 80px rgba(0,0,0,.7); }
+
+.status-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px 4px; font-size: 13px; font-weight: 600; color: #fff; }
+.status-right { display: flex; align-items: center; gap: 5px; }
+.topnav { display: flex; justify-content: space-between; align-items: center; padding: 8px 18px 12px; }
+.topnav-title { font-size: 20px; font-weight: 700; color: #fff; letter-spacing: -.3px; }
+
+.hero-block { padding: 14px 18px; border-bottom: .5px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; }
+.acct-label, .bp-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.bp-label { text-align: right; }
+.acct-val { font-size: 24px; font-weight: 700; color: #fff; letter-spacing: -.5px; }
+.bp-val { font-size: 19px; font-weight: 700; color: #fff; text-align: right; }
+.add-funds-btn { display: block; margin-top: 6px; border: 1.5px solid var(--green); color: var(--green); font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 6px; text-align: center; }
+
+.stats-block { padding: 12px 18px 4px; border-bottom: .5px solid var(--border); }
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px 8px; padding-bottom: 14px; }
+.stat-label-p { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+.stat-val-p { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.stat-val-p.g { color: var(--green); }
+.stat-val-p.r { color: var(--red); }
+
+.tabs { display: flex; border-bottom: .5px solid var(--border); }
+.tab { flex: 1; text-align: center; padding: 12px 0; font-size: 14px; font-weight: 600; color: var(--muted); position: relative; }
+.tab.active { color: var(--green); }
+.tab.active::after { content:''; position: absolute; bottom: 0; left: 16px; right: 16px; height: 2px; background: var(--green); border-radius: 2px 2px 0 0; }
+
+.pills { display: flex; gap: 10px; padding: 14px 18px 10px; }
+.pill { border: 1px solid var(--border); color: var(--muted); font-size: 12px; padding: 5px 16px; border-radius: 20px; }
+.pill.active { border-color: var(--green); color: var(--green); }
+
+.pos-header { display: grid; grid-template-columns: 1fr 120px 100px; padding: 6px 18px 8px; border-bottom: .5px solid var(--border); }
+.ph { font-size: 10.5px; color: var(--muted); font-weight: 600; line-height: 1.4; }
+.ph:not(:first-child) { text-align: right; }
+
+.pos-row { display: grid; grid-template-columns: 1fr 120px 100px; padding: 14px 18px; gap: 6px; align-items: center; border-bottom: .5px solid #1a2030; }
+.pos-row.hidden { display: none; }
+.pos-ticker { font-size: 16px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px; }
+.pos-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.pos-company { font-size: 11px; color: var(--text); margin-top: 3px; }
+.pos-qty-wrap { text-align: right; }
+.pos-qty { font-size: 14px; font-weight: 600; color: var(--green); }
+.pos-price { font-size: 12px; color: var(--text); margin-top: 3px; }
+.pos-pl-wrap { text-align: right; }
+.pl-badge { display: inline-block; font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 6px; min-width: 82px; text-align: center; }
+.pl-badge.g { background: var(--green); color: #0a1018; }
+.pl-badge.r { background: var(--red); color: #fff; }
+.pl-badge.n { background: #3a4a6a; color: var(--text); }
+.pl-pct { font-size: 11.5px; margin-top: 4px; text-align: right; font-weight: 500; }
+.pl-pct.g { color: var(--green); }
+.pl-pct.r { color: var(--red); }
+.pl-pct.n { color: var(--text); }
+
+.bottomnav { display: flex; border-top: .5px solid var(--border); padding: 10px 0 18px; margin-top: 8px; }
+.nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--dim); font-size: 10.5px; font-weight: 500; }
+.nav-item.active { color: var(--green); }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ FORM ══════════════ -->
+<div class="panel">
+  <div class="panel-head">
+    <h2>🖊 Plantilla TradeZero</h2>
+    <span style="font-size:11px;color:var(--dim);">Vista previa en tiempo real</span>
+  </div>
+  <div class="panel-body">
+
+    <div class="section-title">Cuenta</div>
+    <div class="field-grid three">
+      <div class="field"><label>Hora (status bar)</label><input type="text" id="f-time" value="9:23" oninput="render()"></div>
+      <div class="field"><label>Account Value</label><input type="text" id="f-acct" value="54,000.00" oninput="render()"></div>
+      <div class="field"><label>Buying Power</label><input type="text" id="f-bp" value="62,000.00" oninput="render()"></div>
+    </div>
+
+    <div class="section-title">P&L</div>
+    <div class="field-grid three">
+      <div class="field"><label>Open P&L</label>
+        <div class="color-row"><input type="text" id="f-openpl" value="214.00" oninput="render()">
+          <div class="color-toggle"><button class="color-btn g active" onclick="setColor('openpl','g',this)">▲</button><button class="color-btn r" onclick="setColor('openpl','r',this)">▼</button><button class="color-btn n" onclick="setColor('openpl','n',this)">–</button></div>
+        </div></div>
+      <div class="field"><label>Day Unrealized</label>
+        <div class="color-row"><input type="text" id="f-unreal" value="214.00" oninput="render()">
+          <div class="color-toggle"><button class="color-btn g active" onclick="setColor('unreal','g',this)">▲</button><button class="color-btn r" onclick="setColor('unreal','r',this)">▼</button><button class="color-btn n" onclick="setColor('unreal','n',this)">–</button></div>
+        </div></div>
+      <div class="field"><label>Day Realized</label>
+        <div class="color-row"><input type="text" id="f-real" value="210.00" oninput="render()">
+          <div class="color-toggle"><button class="color-btn g active" onclick="setColor('real','g',this)">▲</button><button class="color-btn r" onclick="setColor('real','r',this)">▼</button><button class="color-btn n" onclick="setColor('real','n',this)">–</button></div>
+        </div></div>
+    </div>
+
+    <div class="section-title">Exposición & Liquidez</div>
+    <div class="field-grid three">
+      <div class="field"><label>Equity Exposure</label><input type="text" id="f-exp" value="48,000.00" oninput="render()"></div>
+      <div class="field"><label>Equity Ratio</label><input type="text" id="f-ratio" value="100.00%" oninput="render()"></div>
+      <div class="field"><label>Cash BP</label><input type="text" id="f-cashbp" value="4,000.00" oninput="render()"></div>
+    </div>
+
+    <div class="section-title">Apalancamiento & Costes</div>
+    <div class="field-grid three">
+      <div class="field"><label>Used Leverage</label><input type="text" id="f-ulev" value="0.889x" oninput="render()"></div>
+      <div class="field"><label>Options Cash Used</label><input type="text" id="f-optcash" value="0.00" oninput="render()"></div>
+      <div class="field"><label>Allowed Leverage</label><input type="text" id="f-alev" value="1.000x" oninput="render()"></div>
+      <div class="field"><label>Est. Commissions &amp; Fees</label><input type="text" id="f-comm" value="0.00" oninput="render()"></div>
+      <div class="field"><label>Est. Locate Costs</label><input type="text" id="f-locate" value="0.00" oninput="render()"></div>
+    </div>
+
+    <!-- ── POSICIÓN 1 (siempre visible) ── -->
+    <div class="section-title">Posición 1</div>
+    <div class="field-grid two">
+      <div class="field"><label>Ticker</label><input type="text" id="f-1-ticker" value="IREN" oninput="render()"></div>
+      <div class="field"><label>Nombre empresa</label><input type="text" id="f-1-company" value="Iris Energy Limited" oninput="render()"></div>
+      <div class="field"><label>Nº acciones</label><input type="text" id="f-1-qty" value="+1,000" oninput="render()"></div>
+      <div class="field"><label>Precio medio</label><input type="text" id="f-1-avgprice" value="48.20" oninput="render()"></div>
+    </div>
+    <div class="field-grid two" style="margin-top:10px">
+      <div class="field"><label>P/L $</label>
+        <div class="color-row"><input type="text" id="f-1-pl" value="+214.00" oninput="render()">
+          <div class="color-toggle"><button class="color-btn g active" onclick="setColor('1-pl','g',this)">▲</button><button class="color-btn r" onclick="setColor('1-pl','r',this)">▼</button><button class="color-btn n" onclick="setColor('1-pl','n',this)">–</button></div>
+        </div></div>
+      <div class="field"><label>P/L %</label>
+        <div class="color-row"><input type="text" id="f-1-plpct" value="+0.3%" oninput="render()">
+          <div class="color-toggle"><button class="color-btn g active" onclick="setColor('1-plpct','g',this)">▲</button><button class="color-btn r" onclick="setColor('1-plpct','r',this)">▼</button><button class="color-btn n" onclick="setColor('1-plpct','n',this)">–</button></div>
+        </div></div>
+    </div>
+
+    <!-- ── POSICIÓN 2 ── -->
+    <div class="pos-section-head">
+      <div class="section-title">Posición 2</div>
+      <button class="pos-toggle" id="toggle-2" onclick="togglePos(2)">+ Activar</button>
+    </div>
+    <div class="pos-fields hidden" id="fields-2">
+      <div class="field-grid two">
+        <div class="field"><label>Ticker</label><input type="text" id="f-2-ticker" value="" oninput="render()" placeholder="Ej: SMR"></div>
+        <div class="field"><label>Nombre empresa</label><input type="text" id="f-2-company" value="" oninput="render()" placeholder="Empresa"></div>
+        <div class="field"><label>Nº acciones</label><input type="text" id="f-2-qty" value="" oninput="render()" placeholder="+1,000"></div>
+        <div class="field"><label>Precio medio</label><input type="text" id="f-2-avgprice" value="" oninput="render()" placeholder="12.76"></div>
+      </div>
+      <div class="field-grid two" style="margin-top:10px">
+        <div class="field"><label>P/L $</label>
+          <div class="color-row"><input type="text" id="f-2-pl" value="" oninput="render()" placeholder="+500.00">
+            <div class="color-toggle"><button class="color-btn g active" onclick="setColor('2-pl','g',this)">▲</button><button class="color-btn r" onclick="setColor('2-pl','r',this)">▼</button><button class="color-btn n" onclick="setColor('2-pl','n',this)">–</button></div>
+          </div></div>
+        <div class="field"><label>P/L %</label>
+          <div class="color-row"><input type="text" id="f-2-plpct" value="" oninput="render()" placeholder="+3.5%">
+            <div class="color-toggle"><button class="color-btn g active" onclick="setColor('2-plpct','g',this)">▲</button><button class="color-btn r" onclick="setColor('2-plpct','r',this)">▼</button><button class="color-btn n" onclick="setColor('2-plpct','n',this)">–</button></div>
+          </div></div>
+      </div>
+    </div>
+
+    <!-- ── POSICIÓN 3 ── -->
+    <div class="pos-section-head">
+      <div class="section-title">Posición 3</div>
+      <button class="pos-toggle" id="toggle-3" onclick="togglePos(3)">+ Activar</button>
+    </div>
+    <div class="pos-fields hidden" id="fields-3">
+      <div class="field-grid two">
+        <div class="field"><label>Ticker</label><input type="text" id="f-3-ticker" value="" oninput="render()" placeholder="Ej: NBIS"></div>
+        <div class="field"><label>Nombre empresa</label><input type="text" id="f-3-company" value="" oninput="render()" placeholder="Empresa"></div>
+        <div class="field"><label>Nº acciones</label><input type="text" id="f-3-qty" value="" oninput="render()" placeholder="-100"></div>
+        <div class="field"><label>Precio medio</label><input type="text" id="f-3-avgprice" value="" oninput="render()" placeholder="157.63"></div>
+      </div>
+      <div class="field-grid two" style="margin-top:10px">
+        <div class="field"><label>P/L $</label>
+          <div class="color-row"><input type="text" id="f-3-pl" value="" oninput="render()" placeholder="-317.00">
+            <div class="color-toggle"><button class="color-btn g active" onclick="setColor('3-pl','g',this)">▲</button><button class="color-btn r" onclick="setColor('3-pl','r',this)">▼</button><button class="color-btn n" onclick="setColor('3-pl','n',this)">–</button></div>
+          </div></div>
+        <div class="field"><label>P/L %</label>
+          <div class="color-row"><input type="text" id="f-3-plpct" value="" oninput="render()" placeholder="-2.01%">
+            <div class="color-toggle"><button class="color-btn g active" onclick="setColor('3-plpct','g',this)">▲</button><button class="color-btn r" onclick="setColor('3-plpct','r',this)">▼</button><button class="color-btn n" onclick="setColor('3-plpct','n',this)">–</button></div>
+          </div></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-secondary" onclick="resetForm()">↺ Reset</button>
+      <button class="btn btn-dl" onclick="downloadTicket()">⬇ Descargar PNG</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════ PREVIEW ══════════════ -->
+<div class="preview-wrap">
+  <div class="preview-label">Vista previa</div>
+  <div class="phone" id="ticket">
+
+    <div class="status-bar">
+      <span id="p-time">9:23</span>
+      <div class="status-right">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/></svg>
+        <svg width="16" height="12" viewBox="0 0 20 14" fill="currentColor"><rect x="0" y="8" width="3" height="6" rx="1"/><rect x="4.5" y="5" width="3" height="9" rx="1"/><rect x="9" y="2" width="3" height="12" rx="1"/><rect x="13.5" y="0" width="3" height="14" rx="1"/></svg>
+        <svg width="15" height="12" viewBox="0 0 22 16" fill="currentColor"><path d="M11 12.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm0-4a6.5 6.5 0 0 1 4.6 1.9l-1.4 1.4A4.5 4.5 0 0 0 11 10.5a4.5 4.5 0 0 0-3.2 1.3L6.4 10.4A6.5 6.5 0 0 1 11 8.5zm0-4a11 11 0 0 1 7.8 3.2L17.4 9.1A9 9 0 0 0 11 6.5 9 9 0 0 0 4.6 9.1L3.2 7.7A11 11 0 0 1 11 4.5zm0-4A15.5 15.5 0 0 1 22 4.9L20.6 6.3A13.5 13.5 0 0 0 11 2.5 13.5 13.5 0 0 0 1.4 6.3L0 4.9A15.5 15.5 0 0 1 11 .5z"/></svg>
+        <svg width="22" height="12" viewBox="0 0 26 13" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="21" height="11" rx="2.5"/><rect x="22" y="4" width="3" height="5" rx="1.5" fill="currentColor" stroke="none"/><rect x="2.5" y="2.5" width="16" height="8" rx="1.5" fill="#2ecc7a" stroke="none"/></svg>
+      </div>
+    </div>
+
+    <div class="topnav">
+      <span class="topnav-title">Portfolio</span>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9ba3b8" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    </div>
+
+    <div class="hero-block">
+      <div>
+        <div class="acct-label">Account Value</div>
+        <div class="acct-val" id="p-acct">54,000.00</div>
+      </div>
+      <div>
+        <div class="bp-label">Buying Power</div>
+        <div class="bp-val" id="p-bp">62,000.00</div>
+        <div class="add-funds-btn">Add Funds</div>
+      </div>
+    </div>
+
+    <div class="stats-block">
+      <div class="stat-grid">
+        <div><div class="stat-label-p">Open P&amp;L</div><div class="stat-val-p g" id="p-openpl">214.00</div></div>
+        <div><div class="stat-label-p">Day Unrealized</div><div class="stat-val-p g" id="p-unreal">214.00</div></div>
+        <div><div class="stat-label-p">Day Realized</div><div class="stat-val-p g" id="p-real">210.00</div></div>
+        <div><div class="stat-label-p">Equity Exposure</div><div class="stat-val-p" id="p-exp">48,000.00</div></div>
+        <div><div class="stat-label-p">Equity Ratio</div><div class="stat-val-p" id="p-ratio">100.00%</div></div>
+        <div><div class="stat-label-p">Cash BP</div><div class="stat-val-p" id="p-cashbp">4,000.00</div></div>
+        <div><div class="stat-label-p">Used Leverage</div><div class="stat-val-p" id="p-ulev">0.889x</div></div>
+        <div><div class="stat-label-p">Options Cash Used</div><div class="stat-val-p" id="p-optcash">0.00</div></div>
+        <div><div class="stat-label-p">Allowed Leverage</div><div class="stat-val-p" id="p-alev">1.000x</div></div>
+        <div><div class="stat-label-p">Est. Commissions &amp; Fees</div><div class="stat-val-p" id="p-comm">0.00</div></div>
+        <div><div class="stat-label-p">Est. Locate Costs</div><div class="stat-val-p" id="p-locate">0.00</div></div>
+        <div></div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active">Stocks</div>
+      <div class="tab">Options</div>
+    </div>
+    <div class="pills">
+      <div class="pill">Prices</div>
+      <div class="pill active">Positions</div>
+      <div class="pill">Locates</div>
+    </div>
+    <div class="pos-header">
+      <div class="ph">Symbol ⇅</div>
+      <div class="ph">Quantity<br>Average Price</div>
+      <div class="ph">P/L ⇅<br>P/L %</div>
+    </div>
+
+    <!-- Pos 1 (always visible) -->
+    <div class="pos-row" id="prow-1">
+      <div>
+        <div class="pos-ticker"><span class="pos-dot" id="p-1-dot" style="background:#2ecc7a"></span><span id="p-1-ticker">IREN</span></div>
+        <div class="pos-company" id="p-1-company">Iris Energy Limited</div>
+      </div>
+      <div class="pos-qty-wrap">
+        <div class="pos-qty" id="p-1-qty">+1,000</div>
+        <div class="pos-price" id="p-1-avgprice">48.20</div>
+      </div>
+      <div class="pos-pl-wrap">
+        <div class="pl-badge g" id="p-1-pl">+214.00</div>
+        <div class="pl-pct g" id="p-1-plpct">+0.3%</div>
+      </div>
+    </div>
+
+    <!-- Pos 2 (hidden by default) -->
+    <div class="pos-row hidden" id="prow-2">
+      <div>
+        <div class="pos-ticker"><span class="pos-dot" id="p-2-dot" style="background:#2ecc7a"></span><span id="p-2-ticker"></span></div>
+        <div class="pos-company" id="p-2-company"></div>
+      </div>
+      <div class="pos-qty-wrap">
+        <div class="pos-qty" id="p-2-qty"></div>
+        <div class="pos-price" id="p-2-avgprice"></div>
+      </div>
+      <div class="pos-pl-wrap">
+        <div class="pl-badge g" id="p-2-pl"></div>
+        <div class="pl-pct g" id="p-2-plpct"></div>
+      </div>
+    </div>
+
+    <!-- Pos 3 (hidden by default) -->
+    <div class="pos-row hidden" id="prow-3">
+      <div>
+        <div class="pos-ticker"><span class="pos-dot" id="p-3-dot" style="background:#2ecc7a"></span><span id="p-3-ticker"></span></div>
+        <div class="pos-company" id="p-3-company"></div>
+      </div>
+      <div class="pos-qty-wrap">
+        <div class="pos-qty" id="p-3-qty"></div>
+        <div class="pos-price" id="p-3-avgprice"></div>
+      </div>
+      <div class="pos-pl-wrap">
+        <div class="pl-badge g" id="p-3-pl"></div>
+        <div class="pl-pct g" id="p-3-plpct"></div>
+      </div>
+    </div>
+
+    <div class="bottomnav">
+      <div class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Watchlists</div>
+      <div class="nav-item active"><svg width="20" height="20" viewBox="0 0 24 24" fill="#2ecc7a" stroke="#2ecc7a" stroke-width="1"><rect x="2" y="14" width="4" height="8" rx="1"/><rect x="9" y="8" width="4" height="14" rx="1"/><rect x="16" y="3" width="4" height="19" rx="1"/></svg>Portfolio</div>
+      <div class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="3" x2="12" y2="21"/><polyline points="7 8 12 3 17 8"/></svg>Orders</div>
+      <div class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>Locates</div>
+      <div class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>More</div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+const colorState = {
+  openpl:'g', unreal:'g', real:'g',
+  '1-pl':'g', '1-plpct':'g',
+  '2-pl':'g', '2-plpct':'g',
+  '3-pl':'g', '3-plpct':'g'
+};
+const posActive = { 2: false, 3: false };
+
+function setColor(field, color, btn) {
+  colorState[field] = color;
+  btn.closest('.color-toggle').querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function togglePos(n) {
+  posActive[n] = !posActive[n];
+  const on = posActive[n];
+  document.getElementById('fields-'+n).classList.toggle('hidden', !on);
+  document.getElementById('prow-'+n).classList.toggle('hidden', !on);
+  const btn = document.getElementById('toggle-'+n);
+  btn.textContent = on ? '✕ Desactivar' : '+ Activar';
+  btn.classList.toggle('on', on);
+  render();
+}
+
+function renderPos(n) {
+  const g = id => document.getElementById(id);
+  const v = id => { const el = g('f-'+id); return el ? el.value : ''; };
+
+  g(`p-${n}-ticker`).textContent   = v(`${n}-ticker`);
+  g(`p-${n}-company`).textContent  = v(`${n}-company`);
+  g(`p-${n}-qty`).textContent      = v(`${n}-qty`);
+  g(`p-${n}-avgprice`).textContent = v(`${n}-avgprice`);
+
+  const plEl = g(`p-${n}-pl`);
+  plEl.textContent = v(`${n}-pl`);
+  plEl.className   = 'pl-badge ' + colorState[`${n}-pl`];
+
+  const dotEl = g(`p-${n}-dot`);
+  const c = colorState[`${n}-pl`];
+  dotEl.style.background = c==='g' ? '#2ecc7a' : c==='r' ? '#e85050' : '#9ba3b8';
+
+  const pctEl = g(`p-${n}-plpct`);
+  pctEl.textContent = v(`${n}-plpct`);
+  pctEl.className   = 'pl-pct ' + colorState[`${n}-plpct`];
+}
+
+function render() {
+  const g = id => document.getElementById(id);
+  const v = id => g('f-'+id).value;
+
+  g('p-time').textContent  = v('time');
+  g('p-acct').textContent   = v('acct');
+  g('p-bp').textContent     = v('bp');
+  g('p-exp').textContent    = v('exp');
+  g('p-ratio').textContent  = v('ratio');
+  g('p-cashbp').textContent = v('cashbp');
+  g('p-ulev').textContent   = v('ulev');
+  g('p-optcash').textContent= v('optcash');
+  g('p-alev').textContent   = v('alev');
+  g('p-comm').textContent   = v('comm');
+  g('p-locate').textContent = v('locate');
+
+  applyColor('p-openpl', v('openpl'), colorState.openpl);
+  applyColor('p-unreal', v('unreal'), colorState.unreal);
+  applyColor('p-real',   v('real'),   colorState.real);
+
+  renderPos(1);
+  if (posActive[2]) renderPos(2);
+  if (posActive[3]) renderPos(3);
+}
+
+function applyColor(id, value, color) {
+  const el = document.getElementById(id);
+  el.textContent = value;
+  el.className = 'stat-val-p' + (color==='g' ? ' g' : color==='r' ? ' r' : '');
+}
+
+function resetForm() {
+  const d = {
+    acct:'54,000.00', bp:'62,000.00', time:'9:23',
+    openpl:'214.00', unreal:'214.00', real:'210.00',
+    exp:'48,000.00', ratio:'100.00%', cashbp:'4,000.00',
+    ulev:'0.889x', optcash:'0.00', alev:'1.000x',
+    comm:'0.00', locate:'0.00',
+    '1-ticker':'IREN','1-company':'Iris Energy Limited','1-qty':'+1,000','1-avgprice':'48.20','1-pl':'+214.00','1-plpct':'+0.3%',
+    '2-ticker':'','2-company':'','2-qty':'','2-avgprice':'','2-pl':'','2-plpct':'',
+    '3-ticker':'','3-company':'','3-qty':'','3-avgprice':'','3-pl':'','3-plpct':''
+  };
+  for (const [k,val] of Object.entries(d)) {
+    const el = document.getElementById('f-'+k);
+    if (el) el.value = val;
+  }
+  // reset colors
+  document.querySelectorAll('.color-toggle').forEach(g => {
+    g.querySelectorAll('.color-btn').forEach((b,i) => b.classList.toggle('active', i===0));
+  });
+  Object.keys(colorState).forEach(k => colorState[k]='g');
+  // deactivate pos 2 & 3
+  [2,3].forEach(n => {
+    if (posActive[n]) togglePos(n);
+  });
+  render();
+}
+
+async function downloadTicket() {
+  const btn = document.querySelector('.btn-dl');
+  btn.textContent = '⏳ Generando...';
+  try {
+    const canvas = await html2canvas(document.getElementById('ticket'), {
+      scale: 3, backgroundColor: '#0d1321', useCORS: true, logging: false
+    });
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = `TZ_${document.getElementById('f-1-ticker').value||'ticket'}.png`;
+    a.click();
+  } catch(e) { alert('Error'); }
+  btn.textContent = '⬇ Descargar PNG';
+}
+
+render();
+</script>
+</body>
+</html>

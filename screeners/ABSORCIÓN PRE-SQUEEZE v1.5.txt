@@ -1,0 +1,48 @@
+// ============================================================
+// SCREENER: ABSORCIÓN PRE-SQUEEZE v1.5
+// ============================================================
+
+// ---- VIGÍA10 NATIVO ----
+ignored, ignored, ignored, ignored, ignored, filtro, sv, ignored = CALL "Blai5 VIGIA 10"
+
+// ---- MEDIAS BASE ----
+avgVol20    = Average[20](volume)
+volDolarMed = Average[20](close * volume)
+
+// ---- BLOQUE 2: RANGO PROLONGADO ----
+rangoAlto25     = Highest[25](high)
+rangoBajo25     = Lowest[25](low)
+rangoAmp25      = (rangoAlto25 - rangoBajo25) / close * 100
+rangoComprimido = rangoAmp25 < 40
+
+midBoll     = Average[20](close)
+stdBoll     = STD[20](close)
+bollUp      = midBoll + 2 * stdBoll
+bollDn      = midBoll - 2 * stdBoll
+bollAnchura = (bollUp - bollDn) / close * 100
+bollMedAnch = Average[10](bollAnchura)
+bollComprime = bollAnchura < bollMedAnch * 0.85
+
+// ---- BLOQUE 3: VOLUMEN CLIMÁTICO + PRECIO INERTE ----
+volMax5  = Highest[5](volume)
+volX     = volMax5 / avgVol20
+rangoPost = (Highest[3](high) - Lowest[3](low)) / close * 100
+precioNoExploto = (close - Lowest[5](low)) / Lowest[5](low) * 100 < 20
+
+// ---- BLOQUE 4: VIGÍA10 DESPERTANDO ----
+svMax15    = Highest[15](sv)
+svMin15    = Lowest[15](sv)
+svMax40    = Highest[40](sv)
+svMin40    = Lowest[40](sv)
+bandaVigia = (svMax15 - svMin15) < (svMax40 - svMin40) * 0.55
+svGirando  = sv > sv[1] AND sv[1] > sv[2]
+filtroGira = filtro > filtro[2]
+
+// ---- SCORE ----
+score = (volX > 5) * 20 + (volX > 7) * 15 + (rangoPost < 10) * 20 + (precioNoExploto * 15) + (rangoComprimido * 10) + (bollComprime * 10) + (svGirando * 20) + (bandaVigia * 5) + (filtroGira * 5)
+
+// ---- CONDICIÓN FINAL v1.5 ----
+// CAMBIOS: volDolarMed 300k, volX > 3 puerta dura, rangoPost < 20 puerta dura, score >= 55
+cond = close >= 0.50 AND close <= 3.00 AND avgVol20 >= 200000 AND volDolarMed >= 300000 AND (close - close[1]) / close[1] * 100 > -15 AND rangoAmp25 < 60 AND sv > -50 AND volX > 3 AND rangoPost < 20 AND score >= 70
+
+SCREENER[cond](score AS "Score", close AS "Precio", volX AS "VolX", rangoPost AS "RangoPost%", rangoAmp25 AS "Rango25%", sv AS "SV", filtro AS "Filtro")

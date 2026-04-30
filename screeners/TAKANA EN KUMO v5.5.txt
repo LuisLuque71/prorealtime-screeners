@@ -1,0 +1,83 @@
+// ============================================================
+// SCREENER: TAKANA EN KUMO v5.5
+// NYSE + Nasdaq | Largos | Diario
+// AJUSTA: tolerancia (0.005-0.010) | scoreMin (65-90)
+// ============================================================
+
+// ---- VIGÍA10 ----
+ignored, ignored, ignored, ignored, ignored, ignored, sv, mr = CALL "Blai5 VIGIA 10"
+filtro = ExponentialAverage[50](sv)
+astro  = sv - mr
+
+// ---- ICHIMOKU ----
+tenkan  = (Highest[9](High)  + Lowest[9](Low))  / 2
+kijun   = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa     = (tenkan + kijun) / 2
+ssb     = (Highest[52](High) + Lowest[52](Low)) / 2
+kumoTop = Max(ssa,ssb)
+kumoBot = Min(ssa,ssb)
+
+// ---- FUSIÓN TAKANA ----
+tolerancia = 0.007
+diffTK0 = Abs(tenkan    - kijun)    / (close + 0.001)
+diffTK1 = Abs(tenkan[1] - kijun[1]) / (close + 0.001)
+diffTK2 = Abs(tenkan[2] - kijun[2]) / (close + 0.001)
+diffTK3 = Abs(tenkan[3] - kijun[3]) / (close + 0.001)
+
+countTK    = (diffTK0 < tolerancia) + (diffTK1 < tolerancia) + (diffTK2 < tolerancia) + (diffTK3 < tolerancia)
+takanaOk   = countTK >= 2
+takanaReal = diffTK0 > 0.0002 AND diffTK0 < tolerancia
+
+// ---- TAKANA ASCENDENTE ----
+tkMid          = (tenkan + kijun) / 2
+takanaAscSuave = tkMid > tkMid[2]
+
+// ---- ZONA KUMO/SSB ----
+enKumo  = close >= kumoBot AND close <= kumoTop
+bajoSSB = close >= ssb * 0.92 AND close < kumoBot
+zonaOk  = enKumo OR bajoSSB
+
+kumoGros = (kumoTop - kumoBot) / (close + 0.001) * 100
+kumoReal = kumoGros > 1.5
+kumoFina = kumoGros < 15
+
+// ---- VIGÍA10 GATES BASE ----
+svSube    = sv > sv[1] AND sv[1] > sv[2]
+svNoLate  = sv < 40
+svNoDeep  = sv > -35
+svGirando = sv > mr OR svSube
+
+// ---- MEJORA 1: COMPRESIÓN PREVIA ----
+amplitudReciente = highest[5](sv) - lowest[5](sv)
+amplitudPrevia   = highest[15](sv[5]) - lowest[15](sv[5])
+postSqueeze = amplitudPrevia <= 15 AND amplitudReciente >= amplitudPrevia * 1.2
+
+// ---- MEJORA 2: ACELERACIÓN ----
+svConFuerza = (sv - sv[1]) >= (sv[1] - sv[2])
+
+// ---- MEJORA 3: FILTRO DIVERGENTE ----
+filtroDiv = filtro < 0 AND (filtro - filtro[3]) > (sv - sv[3]) AND filtro > filtro[3]
+
+// ---- LIQUIDEZ ----
+avgVol20 = average[20](volume)
+
+// ---- SCORING ----
+s1  = takanaOk * 20
+s2  = takanaAscSuave * 15
+s3  = enKumo * 20
+s4  = kumoFina * 10
+s5  = svSube * 20
+s6  = svGirando * 15
+s7  = postSqueeze * 15
+s8  = svConFuerza * 10
+s9  = filtroDiv * 12
+s10 = (astro > 0 AND astro[3] <= 0) * 10
+s11 = (filtro > filtro[3]) * 5
+s12 = (mr > 0) * 8
+
+score = s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12
+
+// ---- CONDICIÓN FINAL ----
+condicion = close >= 1.00 AND close <= 500 AND avgVol20 >= 300000 AND zonaOk AND kumoFina AND kumoReal AND takanaOk AND takanaReal AND takanaAscSuave AND svSube AND svNoLate AND svNoDeep AND score >= 75
+
+SCREENER[score * condicion](score,diffTK0 * 100,kumoGros,filtro)

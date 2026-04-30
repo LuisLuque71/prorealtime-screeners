@@ -1,0 +1,40 @@
+// ICHIMOKU SCANNER PRO - ProScreener
+
+volmin = 1000000
+maxdist = 3.0
+
+// Ichimoku
+tenkan = (Highest[9](High) + Lowest[9](Low)) / 2
+kijun = (Highest[26](High) + Lowest[26](Low)) / 2
+senkoua = (tenkan + kijun) / 2
+senkoud = (Highest[52](High) + Lowest[52](Low)) / 2
+
+nubea = senkoua[26]
+nubeb = senkoud[26]
+
+// Distancia al kijun
+dist = Abs(Close - kijun) / kijun * 100
+
+// Scoring
+score = 0
+
+IF Close > nubea AND Close > nubeb THEN
+score = score + 15
+ENDIF
+IF nubea > nubeb THEN
+score = score + 15
+ENDIF
+IF tenkan > kijun THEN
+score = score + 10
+ENDIF
+IF Close > kijun THEN
+score = score + 15
+ENDIF
+IF dist < maxdist THEN
+score = score + (25 - (dist / maxdist) * 25)
+ENDIF
+IF Volume > volmin THEN
+score = score + 20
+ENDIF
+
+SCREENER[score >= 95](score AS "Score")
