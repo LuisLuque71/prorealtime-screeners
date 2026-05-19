@@ -1,0 +1,157 @@
+// ============================================================
+// SCREENER VIGIA10 + ICHIMOKU — REBOTE EN SOPORTE v1.5 DIARIO
+// Uptrend real → Corrección sana (15-35%) → Toque soporte → Rebote
+// Ventana toque: 2-8 sesiones · Objetivo: +10-20%
+// Timeframe: DIARIO · Alta convicción · 5-15 señales
+// Mejoras v1.5: gate c>EMA200, cap pullback 35%, scoring recorridoLibre corregido
+// ============================================================
+// Si salen 0 resultados: baja scoreMin a 120 o quita enTendencia del gate
+// Si salen demasiados: sube scoreMin a 170 o minVolDolar a 2000000
+// ============================================================
+
+// ---- PARÁMETROS ----
+minVolDolar    = 1000000
+minPrice       = 12
+maxPrice       = 500
+tolerSoporte   = 0.040
+kijunSlopeBars = 10
+minTendPrevia  = 0.10
+scoreMin       = 270
+tramoMin       = 0.15
+tramoMax       = 0.35
+
+// ---- DATOS BÁSICOS ----
+c = Close
+v = Volume
+avgVol20    = Average[20](v)
+volDolarMed = Average[20](v * c)
+cLiquidez   = volDolarMed >= minVolDolar    // usa solo media 20d: válido en pre-market
+cPrecio     = c >= minPrice AND c <= maxPrice
+
+// ---- VIGÍA10 ----
+ignored, vpm, astro, ignored, ignored, filtro, sv, mr = CALL "Blai5 VIGIA 10"
+avgVpm            = Average[20](vpm)
+filtroPosNow      = filtro > 0
+filtroGirando     = filtro > filtro[2]
+svPos             = sv > 0
+svGirando         = sv > sv[1] AND sv > sv[2]   // sv subiendo aunque aún negativo
+astroPos          = astro > 0
+vpmOk             = vpm >= avgVpm
+svSobreMrOGirando = sv > mr OR svGirando
+
+// ---- ICHIMOKU ----
+tenkan = (Highest[9](High)  + Lowest[9](Low))  / 2
+kijun  = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa0   = (tenkan + kijun) / 2
+ssb0   = (Highest[52](High) + Lowest[52](Low)) / 2
+ssa    = ssa0[26]
+ssb    = ssb0[26]
+
+kumoBot     = Min(ssa, ssb)
+kumoAlcista = ssa > ssb
+
+// ---- EMAs ----
+ema200 = Average[200](Close)
+ema21  = ExponentialAverage[21](Close)
+
+// ---- TENDENCIA REAL: precio sobre EMA200 en subida ----
+enTendencia = c > ema200
+
+// ---- TENDENCIA PREVIA: pullback sano (no caída libre) ----
+max60           = Highest[60](High)
+tendenciaPrevia = max60 > c * (1 + minTendPrevia)
+
+// ============================================================
+// DETECCIÓN TOQUE SOPORTE (ventana 2-8 sesiones)
+// Detecta CIERRE cercano al soporte O MECHA que toca y cierra por encima
+// La mecha larga = el toque de mayor calidad (rechaza el soporte)
+// ============================================================
+
+// ---- KIJUN ----
+tK2 = (abs(Close[2] - kijun[2]) / (kijun[2] + 0.0001) < tolerSoporte) OR (Low[2] <= kijun[2] * 1.01 AND Close[2] > kijun[2] * 0.99)
+tK3 = (abs(Close[3] - kijun[3]) / (kijun[3] + 0.0001) < tolerSoporte) OR (Low[3] <= kijun[3] * 1.01 AND Close[3] > kijun[3] * 0.99)
+tK4 = (abs(Close[4] - kijun[4]) / (kijun[4] + 0.0001) < tolerSoporte) OR (Low[4] <= kijun[4] * 1.01 AND Close[4] > kijun[4] * 0.99)
+tK5 = (abs(Close[5] - kijun[5]) / (kijun[5] + 0.0001) < tolerSoporte) OR (Low[5] <= kijun[5] * 1.01 AND Close[5] > kijun[5] * 0.99)
+tK6 = (abs(Close[6] - kijun[6]) / (kijun[6] + 0.0001) < tolerSoporte) OR (Low[6] <= kijun[6] * 1.01 AND Close[6] > kijun[6] * 0.99)
+tK7 = (abs(Close[7] - kijun[7]) / (kijun[7] + 0.0001) < tolerSoporte) OR (Low[7] <= kijun[7] * 1.01 AND Close[7] > kijun[7] * 0.99)
+tK8 = (abs(Close[8] - kijun[8]) / (kijun[8] + 0.0001) < tolerSoporte) OR (Low[8] <= kijun[8] * 1.01 AND Close[8] > kijun[8] * 0.99)
+tocoKijun = tK2 OR tK3 OR tK4 OR tK5 OR tK6 OR tK7 OR tK8
+
+// Mecha larga en Kijun: Low perforó Kijun pero Close cerró bien por encima
+mK2 = Low[2] <= kijun[2] * 1.005 AND Close[2] > kijun[2] * 1.01
+mK3 = Low[3] <= kijun[3] * 1.005 AND Close[3] > kijun[3] * 1.01
+mK4 = Low[4] <= kijun[4] * 1.005 AND Close[4] > kijun[4] * 1.01
+mK5 = Low[5] <= kijun[5] * 1.005 AND Close[5] > kijun[5] * 1.01
+mechaKijun = mK2 OR mK3 OR mK4 OR mK5
+
+// ---- SSB ----
+tS2 = (abs(Close[2] - ssb[2]) / (ssb[2] + 0.0001) < tolerSoporte) OR (Low[2] <= ssb[2] * 1.01 AND Close[2] > ssb[2] * 0.99)
+tS3 = (abs(Close[3] - ssb[3]) / (ssb[3] + 0.0001) < tolerSoporte) OR (Low[3] <= ssb[3] * 1.01 AND Close[3] > ssb[3] * 0.99)
+tS4 = (abs(Close[4] - ssb[4]) / (ssb[4] + 0.0001) < tolerSoporte) OR (Low[4] <= ssb[4] * 1.01 AND Close[4] > ssb[4] * 0.99)
+tS5 = (abs(Close[5] - ssb[5]) / (ssb[5] + 0.0001) < tolerSoporte) OR (Low[5] <= ssb[5] * 1.01 AND Close[5] > ssb[5] * 0.99)
+tS6 = (abs(Close[6] - ssb[6]) / (ssb[6] + 0.0001) < tolerSoporte) OR (Low[6] <= ssb[6] * 1.01 AND Close[6] > ssb[6] * 0.99)
+tS7 = (abs(Close[7] - ssb[7]) / (ssb[7] + 0.0001) < tolerSoporte) OR (Low[7] <= ssb[7] * 1.01 AND Close[7] > ssb[7] * 0.99)
+tS8 = (abs(Close[8] - ssb[8]) / (ssb[8] + 0.0001) < tolerSoporte) OR (Low[8] <= ssb[8] * 1.01 AND Close[8] > ssb[8] * 0.99)
+tocoSSB = tS2 OR tS3 OR tS4 OR tS5 OR tS6 OR tS7 OR tS8
+
+// ---- EMA200 ----
+tE2 = (abs(Close[2] - ema200[2]) / (ema200[2] + 0.0001) < tolerSoporte) OR (Low[2] <= ema200[2] * 1.01 AND Close[2] > ema200[2] * 0.99)
+tE3 = (abs(Close[3] - ema200[3]) / (ema200[3] + 0.0001) < tolerSoporte) OR (Low[3] <= ema200[3] * 1.01 AND Close[3] > ema200[3] * 0.99)
+tE4 = (abs(Close[4] - ema200[4]) / (ema200[4] + 0.0001) < tolerSoporte) OR (Low[4] <= ema200[4] * 1.01 AND Close[4] > ema200[4] * 0.99)
+tE5 = (abs(Close[5] - ema200[5]) / (ema200[5] + 0.0001) < tolerSoporte) OR (Low[5] <= ema200[5] * 1.01 AND Close[5] > ema200[5] * 0.99)
+tE6 = (abs(Close[6] - ema200[6]) / (ema200[6] + 0.0001) < tolerSoporte) OR (Low[6] <= ema200[6] * 1.01 AND Close[6] > ema200[6] * 0.99)
+tE7 = (abs(Close[7] - ema200[7]) / (ema200[7] + 0.0001) < tolerSoporte) OR (Low[7] <= ema200[7] * 1.01 AND Close[7] > ema200[7] * 0.99)
+tE8 = (abs(Close[8] - ema200[8]) / (ema200[8] + 0.0001) < tolerSoporte) OR (Low[8] <= ema200[8] * 1.01 AND Close[8] > ema200[8] * 0.99)
+tocoEMA200 = tE2 OR tE3 OR tE4 OR tE5 OR tE6 OR tE7 OR tE8
+
+// ---- EMA21: primer soporte en pullbacks de stocks fuertes ----
+t21b2 = (abs(Close[2] - ema21[2]) / (ema21[2] + 0.0001) < tolerSoporte) OR (Low[2] <= ema21[2] * 1.01 AND Close[2] > ema21[2] * 0.99)
+t21b3 = (abs(Close[3] - ema21[3]) / (ema21[3] + 0.0001) < tolerSoporte) OR (Low[3] <= ema21[3] * 1.01 AND Close[3] > ema21[3] * 0.99)
+t21b4 = (abs(Close[4] - ema21[4]) / (ema21[4] + 0.0001) < tolerSoporte) OR (Low[4] <= ema21[4] * 1.01 AND Close[4] > ema21[4] * 0.99)
+t21b5 = (abs(Close[5] - ema21[5]) / (ema21[5] + 0.0001) < tolerSoporte) OR (Low[5] <= ema21[5] * 1.01 AND Close[5] > ema21[5] * 0.99)
+t21b6 = (abs(Close[6] - ema21[6]) / (ema21[6] + 0.0001) < tolerSoporte) OR (Low[6] <= ema21[6] * 1.01 AND Close[6] > ema21[6] * 0.99)
+t21b7 = (abs(Close[7] - ema21[7]) / (ema21[7] + 0.0001) < tolerSoporte) OR (Low[7] <= ema21[7] * 1.01 AND Close[7] > ema21[7] * 0.99)
+t21b8 = (abs(Close[8] - ema21[8]) / (ema21[8] + 0.0001) < tolerSoporte) OR (Low[8] <= ema21[8] * 1.01 AND Close[8] > ema21[8] * 0.99)
+tocoEMA21 = t21b2 OR t21b3 OR t21b4 OR t21b5 OR t21b6 OR t21b7 OR t21b8
+
+// ---- CONFLUENCIAS ----
+tocoSoportePrioritario = tocoKijun OR tocoSSB OR tocoEMA21
+tocoDoble              = tocoKijun AND tocoSSB
+tocoTriple             = tocoKijun AND tocoSSB AND tocoEMA200
+tocoEMA21Kijun         = tocoEMA21 AND tocoKijun
+
+// ---- CONFIRMACIÓN REBOTE ----
+sobreKijun    = c > kijun
+sobreSSB      = c > ssb
+sobreEMA21    = c > ema21
+confirmacion1 = Close[1] > Close[2]
+confirmacion2 = Close[1] > Close[2] AND c > Close[1]
+velaAlcista   = c > Open
+slope3        = (c - Close[3]) / (Close[3] + 0.0001)
+reboteActivo  = slope3 > 0 AND c > Close[1]
+
+// ---- VOLUMEN EN EL REBOTE ----
+volRebote = v > avgVol20 * 1.2
+
+// ---- ICHIMOKU FONDO SANO ----
+kijunRising         = kijun > kijun[kijunSlopeBars]
+chikouLibre         = c > Close[26]
+kumoFuturaAlc       = ssa0 > ssb0
+precioEnZonaAlcista = c >= kumoBot * 0.97
+
+// ---- RECORRIDO LIBRE AL MÁXIMO ----
+recorridoLibre = (max60 - c) / (c + 0.0001)
+
+// ---- SCORE ----
+scoreRebote = (tocoSSB * 25) + (tocoKijun * 20) + (tocoEMA21 * 15) + (tocoEMA200 * 10) + (tocoDoble * 30) + (tocoTriple * 80) + (tocoEMA21Kijun * 20) + (mechaKijun * 15) + (confirmacion2 * 20) + (confirmacion1 * 10) + (velaAlcista * 8) + (kumoAlcista * 10) + (kijunRising * 12) + (chikouLibre * 8) + (kumoFuturaAlc * 8) + (filtroPosNow * 18) + (filtroGirando * 10) + (svSobreMrOGirando * 12) + (vpmOk * 5) + (astroPos * 5) + (volRebote * 12) + ((recorridoLibre >= 0.15 AND recorridoLibre < 0.25) * 25) + ((recorridoLibre >= 0.25 AND recorridoLibre < 0.35) * 15) + ((ema200 > ema200[20]) * 12)
+
+// ---- CONDICIÓN FINAL ----
+soporteOk     = tocoSoportePrioritario
+reboteOk      = reboteActivo AND (sobreKijun OR sobreSSB OR sobreEMA21)
+vigiaOk       = (svPos OR svGirando) AND filtroGirando
+ichimokuFondo = precioEnZonaAlcista
+calidadOk     = scoreRebote >= scoreMin AND recorridoLibre >= tramoMin AND recorridoLibre <= tramoMax
+
+condicion = cLiquidez AND cPrecio AND enTendencia AND tendenciaPrevia AND soporteOk AND reboteOk AND vigiaOk AND ichimokuFondo AND calidadOk
+
+SCREENER[condicion](scoreRebote AS "Score", recorridoLibre*100 AS "Tramo%", tocoSSB AS "TocóSSB", tocoKijun AS "TocóKij", tocoEMA21 AS "TocóE21", mechaKijun AS "Mecha", confirmacion2 AS "2Conf", sv AS "SV", filtro AS "Filtro", Close AS "Precio")

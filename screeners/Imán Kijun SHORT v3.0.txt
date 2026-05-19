@@ -1,0 +1,187 @@
+// ============================================================
+// SCREENER: Imán Kijun SHORT v3.0
+// NYSE/NASDAQ — Diario
+// Filosofía: downtrend confirmado (precio bajo la nube) con
+// rebote temporal sobre el kijun → continuación bajista al kijun.
+// Tres capas: Estructura (Ichimoku) + Agotamiento (Vigia10) + Institucional (Koncorde)
+// ============================================================
+// AVISO: Preferentemente para PUT options. Short directo solo en
+// stocks con dolarVol > $5M para evitar riesgo de squeeze.
+// Pocas señales: bajar scoreMin a 60 o distMin a 8
+// Muchas señales: subir scoreMin a 110 o distMin a 18
+// ============================================================
+// CAMBIOS VS v2.0:
+//   [FIX] Ranking por score puro — distAbove ya no domina el orden
+//   [FIX] distMin 20 → 15
+//   [FIX] cReversionActiva eliminado del gate → scoring
+//   [FIX v3.1] chikouBajista movido del gate → scoring (era geométricamente
+//     incompatible con distAbove>=15 en el mercado actual: stocks 15%+ sobre
+//     kijun con close<close[26] casi no existen simultáneamente)
+//   [FIX v3.1] koncordeBajOk eliminado del gate → scoring cubre la señal via s38-s41
+//   [NUEVO BLOQUE 1] Temperatura del toque al kijun via barssince
+//     (score de alto peso — domina el ranking sin bloquear el universo)
+//   [NUEVO BLOQUE 10] Koncorde — presión institucional bajista
+//   [NUEVO s42] chikouBajista en scoring: premium cuando toda la estructura alineada
+// ============================================================
+
+// ---- PARAMETROS ----
+minVolDolar = 1000000
+minPrice    = 2
+maxPrice    = 50
+distMin     = 10
+distMax     = 60
+tolerToco   = 0.07
+scoreMin    = 80
+m           = 3
+
+// ---- VIGIA10 ----
+ignored, ignored, ignored, ignored, ignored, filtro, sv, mr = CALL "Blai5 VIGIA 10"
+svBajando  = sv < sv[1]
+svBajando2 = sv < sv[1] AND sv[1] < sv[2]
+
+// ---- KONCORDE ----
+nvi = NegativeVolumeIndex(close)
+nvim = ExponentialAverage[m](nvi)
+nvimax = Highest[90](nvim)
+nvimin = Lowest[90](nvim)
+azul = (nvi - nvim) * 100 / Max(nvimax - nvimin, 0.001)
+azulNeg       = azul < 0
+azulDeteriora = azul < azul[3]
+divergenciaBaj = azul < azul[3] AND close > close[3]
+
+// ---- ICHIMOKU ----
+tenkan = (Highest[9](High) + Lowest[9](Low)) / 2
+kijun  = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa0   = (tenkan + kijun) / 2
+ssb0   = (Highest[52](High) + Lowest[52](Low)) / 2
+ssa    = ssa0[26]
+ssb    = ssb0[26]
+nubeTop    = Max(ssa, ssb)
+nubeBot    = Min(ssa, ssb)
+nubeGrosor = (nubeTop - nubeBot) / (nubeBot + 0.0001) * 100
+nubeBot1   = Min(ssa[1],  ssb[1])
+nubeBot2   = Min(ssa[2],  ssb[2])
+nubeBot3   = Min(ssa[3],  ssb[3])
+nubeBot5   = Min(ssa[5],  ssb[5])
+nubeBot10  = Min(ssa[10], ssb[10])
+nubeBot20  = Min(ssa[20], ssb[20])
+distBelowCloud  = (nubeBot - close) / (nubeBot + 0.0001) * 100
+chikouBajista   = close < close[26]
+kijunHigh10     = Highest[10](kijun)
+kijunLow10      = Lowest[10](kijun)
+kijunRango      = (kijunHigh10 - kijunLow10) / (kijun + 0.0001) * 100
+kijunNoSubiendo = kijun <= kijun[3]
+
+// ---- LIQUIDEZ Y PRECIO ----
+avgVol20 = Average[20](volume)
+dolarVol = close * avgVol20
+volRel   = volume / avgVol20
+cPrecio  = close >= minPrice AND close <= maxPrice
+cVolumen = dolarVol >= minVolDolar
+
+// ---- ESTRUCTURA BAJISTA — precio bajo la nube ----
+cBajoNube = close < nubeBot
+
+// ---- TEMPERATURA DEL TOQUE AL KIJUN ----
+// Detecta via close Y via Low (captura hammers intradiarios)
+// bsToco = 0: toca kijun hoy (hammer) — señal premium
+// bsToco 1-5: toque muy fresco — alta convicción
+// bsToco 6-12: toque reciente — válido
+// bsToco > 12: toque frío — no puntúa (solo relevante para DistAbove)
+enKijun = Abs(close - kijun) / (kijun + 0.0001) < tolerToco OR Abs(Low - kijun) / (kijun + 0.0001) < tolerToco
+bsToco  = barssince(enKijun)
+
+// ---- REBOTE SOBRE KIJUN — goma estirada ----
+cAbove    = close > kijun
+distAbove = (close - kijun) / (kijun + 0.0001) * 100
+cDist     = distAbove >= distMin AND distAbove <= distMax
+
+// ---- FILTRO ANTI-CATALIZADOR ----
+// Excluye stocks con movimiento explosivo hoy (FDA, adquisición, squeeze...)
+// Un stock +15% hoy invalida toda la estructura bajista del setup
+movHoy  = (close - close[1]) / (close[1] + 0.0001) * 100
+cSinGap = movHoy <= 15
+
+// ============================================================
+// HARD GATE — estructura bajista pura: precio bajo nube, rebotado sobre kijun
+// ============================================================
+baseOk = cPrecio AND cVolumen AND cBajoNube AND cAbove AND cDist AND cSinGap
+
+// ============================================================
+// SCORING — discrimina calidad entre los setups que pasan el gate
+// Los hard gates no puntúan — el score es genuino
+// bsToco domina el ranking: toque fresco = señal de alta convicción
+// ============================================================
+
+// ---- BLOQUE 1: TEMPERATURA DEL TOQUE AL KIJUN ----
+// Alto peso: el toque fresco es el corazón del setup
+s1 = (bsToco <= 0) * 40                                       // hammer HOY en kijun: señal premium
+s2 = (bsToco >= 1 AND bsToco <= 3) * 32                      // toque sesión 1-3: rebote muy fresco
+s3 = (bsToco >= 4 AND bsToco <= 8) * 18                      // toque sesión 4-8: rebote válido
+s4 = (bsToco >= 9 AND bsToco <= 12) * 8                      // toque sesión 9-12: enfriando
+
+// ---- BLOQUE 2: RECHAZO DE LA NUBE (señal de continuación bajista) ----
+s5 = (close[1] >= nubeBot1 AND close < nubeBot) * 30         // cierre ayer en/sobre nube, hoy rechazado
+s6 = (High[1] > nubeBot1 AND close[1] < nubeBot1) * 25      // mecha en nube ayer: wick rejection
+s7 = (close[2] >= nubeBot2 AND close[1] < nubeBot2 AND close < nubeBot) * 20
+s8 = (close[3] >= nubeBot3 AND close[2] < nubeBot3 AND close < nubeBot) * 15
+
+// ---- BLOQUE 3: CALIDAD DE LA ESTRUCTURA BAJISTA ----
+s9  = (ssa < ssb) * 12                                        // nube roja: estructura bajista robusta
+s10 = (ssa0 < ssb0) * 8                                       // nube futura también bajista
+s11 = (nubeGrosor > 10) * 8                                   // nube gruesa: resistencia overhead fuerte
+
+// ---- BLOQUE 4: KIJUN — CALIDAD DEL TARGET ----
+s12 = (kijunRango < 3) * 20                                   // kijun muy plano: target fijo, reversión limpia
+s13 = (kijunRango >= 3 AND kijunRango < 6) * 12
+s14 = (kijunRango >= 6 AND kijunRango < 10) * 5
+s15 = (kijun < kijun[5]) * 10                                 // kijun bajando: target desciende hacia el precio
+s16 = kijunNoSubiendo * 8                                     // kijun no sube: target no huye del precio
+
+// ---- BLOQUE 5: POTENCIAL DE RECORRIDO ----
+s17 = (distAbove >= distMin AND distAbove < 30) * 10
+s18 = (distAbove >= 30 AND distAbove < 45) * 20               // zona óptima
+s19 = (distAbove >= 45 AND distAbove <= distMax) * 18         // zona extendida
+s20 = (distAbove < distAbove[2]) * 12                         // convergencia activa 2 barras
+
+// ---- BLOQUE 6: VIGIA10 — AGOTAMIENTO DEL REBOTE ----
+s21 = svBajando * 10                                          // sv empieza a bajar: primer signo de agotamiento
+s22 = svBajando2 * 15                                         // giro bajista confirmado 2 barras consecutivas
+s43 = (sv < mr) * 10                                          // sv bajo mr: impulso vendedor activo
+s23 = (sv < 0) * 12                                           // sv cruzó a negativo: señal bajista plena
+s24 = (filtro < filtro[3]) * 10                               // filtro deteriorándose en 3 días
+s25 = (filtro < 0) * 8                                        // filtro negativo: tendencia bajista confirmada
+
+// ---- BLOQUE 7: PRICE ACTION Y VOLUMEN ----
+s26 = (close < open) * 10                                     // vela bajista hoy
+s27 = (close < close[1]) * 8                                  // precio cae vs ayer
+s28 = (volRel >= 1.5 AND close < open) * 15                   // volumen alto + vela roja: distribución
+s29 = (volRel >= 1.2 AND volRel < 1.5 AND close < open) * 8
+s30 = (tenkan < tenkan[3]) * 8                                // tenkan girando a la baja
+s31 = (close < tenkan) * 8                                    // precio bajo la media corta
+
+// ---- BLOQUE 8: PROFUNDIDAD BAJO LA NUBE ----
+s32 = (distBelowCloud > 5)  * 8
+s33 = (distBelowCloud > 15) * 10
+s34 = (distBelowCloud > 25) * 8
+
+// ---- BLOQUE 9: HISTORIAL BAJO LA NUBE ----
+s35 = (close[5]  < nubeBot5)  * 8
+s36 = (close[10] < nubeBot10) * 10
+s37 = (close[20] < nubeBot20) * 12
+
+// ---- BLOQUE 10: KONCORDE — PRESIÓN INSTITUCIONAL BAJISTA ----
+s38 = azulNeg * 20                                            // manos fuertes no apoyan el rebote
+s39 = azulDeteriora * 15                                      // institucionales saliendo durante la subida
+s40 = divergenciaBaj * 35                                     // señal premium: distribución silenciosa
+s41 = (azul < -10) * 10                                       // institucionales claramente bajistas
+
+// ---- BLOQUE 11: CHIKOU — ESTRUCTURA ICHIMOKU COMPLETA BAJISTA ----
+s42 = chikouBajista * 20                                      // premium: toda la estructura Ichimoku alineada bajista
+
+score = s1+s2+s3+s4+s5+s6+s7+s8+s9+s10+s11+s12+s13+s14+s15+s16+s17+s18+s19+s20+s21+s22+s23+s24+s25+s26+s27+s28+s29+s30+s31+s32+s33+s34+s35+s36+s37+s38+s39+s40+s41+s42+s43
+
+// ---- CONDICION FINAL ----
+condicion = baseOk AND score >= scoreMin
+
+SCREENER[score * condicion](score, distAbove AS "Dist%", bsToco AS "BsToco", azul AS "Azul", divergenciaBaj AS "DivBaj", sv, filtro, close, volRel)

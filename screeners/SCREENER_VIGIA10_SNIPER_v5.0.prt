@@ -1,0 +1,120 @@
+// ============================================
+// SCREENER VIGIA10 SNIPER v5.0
+// Penny & Micro Stocks | NYSE + Nasdaq | Largos
+// Diario | Optimizado para PREMERCADO
+// Ichimoku se aplica manualmente después
+// ============================================
+// SQUEEZE: Bollinger sobre precio (weekly + daily), probado y funcional
+// SEÑAL:   SV/MR del Vigía (orden correcto confirmado por screener Blai5)
+// ============================================
+// AJUSTE scoreMin para ~10-20 resultados:
+//   Más resultados  -> baja scoreMin (ej: 50)
+//   Menos resultados -> sube scoreMin (ej: 90)
+// ============================================
+
+// ----- Parámetros -----
+minAvgVol    = 200000
+minPrice     = 0.80
+maxPrice     = 15
+minAtrPct    = 0.020
+maxExtPct    = 0.15
+crossLB      = 4
+scoreMin     = 70
+
+// ----- Datos básicos -----
+c      = Close
+v      = Volume
+avgVol = Average[20](v)
+cLiquidez = avgVol >= minAvgVol
+cPrecio   = c >= minPrice AND c <= maxPrice
+
+// ----- Vigía10: orden correcto del CALL -----
+ignored, ignored, ignored, ignored, ignored, SV, MR, ignored = CALL "Blai5 VIGIA 10"
+
+// Filtro reconstruido como EMA20 de SV (definición oficial Blai5)
+filtro = ExponentialAverage[20](SV)
+
+// ----- ATR% -----
+atr14   = AverageTrueRange[14](Close)
+atrPct  = atr14 / (c + 0.0001)
+atrOk   = atrPct >= minAtrPct
+
+// ----- Anti-tardío -----
+ma20        = Average[20](Close)
+extMa20     = (c - ma20) / (c + 0.0001)
+notExtended = extMa20 <= maxExtPct
+aboveMa20   = c > ma20
+
+// ----- Motor volumen: bonus -----
+volX    = v / (avgVol + 0.0001)
+motorOk = volX >= 1.2
+
+// ============================================
+// SQUEEZE SEMANAL: Bollinger en mínimo de 24 semanas
+// Detecta la compresión de fondo (el resorte cargado)
+// ============================================
+TIMEFRAME(WEEKLY)
+UpperBandW   = BollingerUp[20](Close)
+LowerBandW   = BollingerDown[20](Close)
+BollDiffW    = UpperBandW - LowerBandW
+squeezeWeekly = BollDiffW <= Lowest[24](BollDiffW)
+
+// ============================================
+// SQUEEZE DIARIO: 4 velas consecutivas de contracción
+// Detecta el momento exacto de máxima compresión diaria
+// ============================================
+TIMEFRAME(DAILY)
+UpperBandD   = BollingerUp[20](Close)
+LowerBandD   = BollingerDown[20](Close)
+BollDiffD    = UpperBandD - LowerBandD
+squeezeDaily = BollDiffD[4] > BollDiffD[3] AND BollDiffD[3] > BollDiffD[2] AND BollDiffD[2] > BollDiffD[1] AND BollDiffD[1] > BollDiffD[0]
+
+// Squeeze completo: compresión semanal de fondo + contracción diaria activa
+squeezeTotal = squeezeWeekly AND squeezeDaily
+
+// Squeeze solo diario (más permisivo, para no perder setups)
+squeezeOnlyDaily = squeezeDaily AND BollDiffD <= Average[20](BollDiffD) * 0.80
+
+// ============================================
+// SEÑALES DE CRUCE VIGÍA
+// ============================================
+
+// NIVEL 0: Pre-cruce (SV subiendo hacia MR sin cruzar, filtro alcista)
+svSubiendo = SV > SV[1] AND SV > SV[2]
+mrGirando  = MR > MR[1]
+nivel0     = svSubiendo AND mrGirando AND SV < MR AND filtro > 0
+
+// NIVEL 1: Cruce SV/MR fresco (<=crossLB velas)
+crossSVMR = SV CROSSES OVER MR
+bsCrossN1 = barssince(crossSVMR)
+nivel1    = bsCrossN1 <= crossLB AND SV > 0
+
+// SEÑAL DORADA: Nivel1 + Filtro sobre cero
+senalDorada = nivel1 AND filtro > 0
+
+// Filtro cruzando cero recientemente
+filtroFresco = filtro CROSSES OVER 0
+
+// ============================================
+// SCORE
+// ============================================
+// squeezeTotal    = 25 pts  (squeeze semanal + diario: el setup más potente)
+// squeezeOnlyD    = 15 pts  (solo squeeze diario activo)
+// senalDorada     = 25 pts  (cruce SV/MR + filtro>0)
+// nivel1          = 12 pts  (cruce SV/MR solo)
+// nivel0          =  8 pts  (pre-cruce)
+// filtroFresco    =  8 pts  (filtro cruzando cero)
+// motorOk         =  7 pts  (volumen activo)
+// ATR             = hasta ~32 pts para penny stocks (atrPct*800)
+
+score = (squeezeTotal * 25) + (squeezeOnlyDaily * 15) + (senalDorada * 25) + (nivel1 * 12) + (nivel0 * 8) + (filtroFresco * 8) + (motorOk * 7) + (atrPct * 800)
+
+// ============================================
+// CONDICIÓN FINAL
+// Al menos una señal Vigía activa Y al menos un squeeze activo
+// ============================================
+vigiaActiva   = nivel0 OR nivel1
+squeezeActivo = squeezeTotal OR squeezeOnlyDaily
+condicion = cLiquidez AND cPrecio AND atrOk AND notExtended AND aboveMa20 AND vigiaActiva AND squeezeActivo AND score >= scoreMin
+
+SCREENER[condicion](score AS "Score", Close AS "Precio", BollDiffD AS "BollD", atrPct*100 AS "ATR%", volX AS "VolX", filtro AS "Filtro", SV AS "SV", MR AS "MR")

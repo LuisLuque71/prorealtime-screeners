@@ -1,0 +1,153 @@
+// ============================================================
+// SCREENER: PENNY SPRING EXTREME v1.1
+// NYSE + Nasdaq | Largos | Diario | $0.10-$5
+// Filosofía: penny BAJO la nube (castigada o lateral largo) donde
+// aparece volumen alto PERO el precio no se mueve (rango estrecho
+// en la barra de alto vol) → las manos fuertes absorben la oferta
+// sin levantar el precio. Target natural: EMA21, Kijun, kumoBot.
+// Ajuste si pocas señales: baja climVol a 2x o sube distMin60 a 40%
+// ============================================================
+
+// ---- VIGÍA10 ----
+ignored, ignored, ignored, ignored, ignored, filtro, sv, mr = CALL "Blai5 VIGIA 10"
+
+// ---- EMA ----
+ema21 = ExponentialAverage[21](close)
+
+// ---- LIQUIDEZ ----
+avgVol   = Average[20](volume)
+dolarVol = close * avgVol
+volRel   = volume / avgVol
+
+// ---- ICHIMOKU ----
+tenkan  = (Highest[9](High)  + Lowest[9](Low))  / 2
+kijun   = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa0    = (tenkan + kijun) / 2
+ssb0    = (Highest[52](High) + Lowest[52](Low)) / 2
+kumoBot = Min(ssa0, ssb0)
+
+// ============================================================
+// PILAR 1 — DEBAJO DE LA NUBE (castigada o lateral largo)
+// ============================================================
+bajaNube = close < kumoBot   // HARD GATE: estrictamente bajo la nube
+
+minimo60  = Lowest[60](Low)
+distMin60 = (close - minimo60) / (close + 0.001) * 100
+
+// Distancia a los tres targets naturales de rebote
+distEMA21 = (ema21  - close) / (close + 0.001) * 100
+distKijun = (kijun  - close) / (close + 0.001) * 100
+distNube  = (kumoBot - close) / (close + 0.001) * 100
+
+// Rango 40 días: mucho rango = stock muy castigado, poco = lateral comprimido
+rango40 = (Highest[40](High) - Lowest[40](Low)) / (close + 0.001) * 100
+
+// Stock realmente hundido: precio 40%+ por debajo del máximo de 60 días
+castigado = close < Highest[60](High) * 0.60
+
+// ============================================================
+// PILAR 2 — VOLUMEN ALTO + PRECIO QUIETO (ABSORCIÓN INSTITUCIONAL)
+// KEY SIGNAL: barra con 3x+ volumen pero rango estrecho
+// Si con ese volumen el precio no se mueve → absorción pura
+// Las manos fuertes compran todo lo que sale sin levantar el precio
+// ============================================================
+
+// Barras con volumen climático (>= 3x media) en las últimas 5 barras
+clim0 = volume    >= avgVol * 3
+clim1 = volume[1] >= avgVol * 3
+clim2 = volume[2] >= avgVol * 3
+clim3 = volume[3] >= avgVol * 3
+clim4 = volume[4] >= avgVol * 3
+climVol = clim0 OR clim1 OR clim2 OR clim3 OR clim4
+
+// Rango de cada barra climática (% del precio)
+rBar0 = (High   - Low)   / (close + 0.001) * 100
+rBar1 = (High[1] - Low[1]) / (close + 0.001) * 100
+rBar2 = (High[2] - Low[2]) / (close + 0.001) * 100
+rBar3 = (High[3] - Low[3]) / (close + 0.001) * 100
+rBar4 = (High[4] - Low[4]) / (close + 0.001) * 100
+
+// Absorción quieta: volumen 3x+ pero rango < 10% → precio no se mueve
+absQ0 = clim0 AND rBar0 < 10
+absQ1 = clim1 AND rBar1 < 10
+absQ2 = clim2 AND rBar2 < 10
+absQ3 = clim3 AND rBar3 < 10
+absQ4 = clim4 AND rBar4 < 10
+absorcionQuieta = absQ0 OR absQ1 OR absQ2 OR absQ3 OR absQ4
+
+// Divergencia acumulativa: precio plano 10 días + volumen medio sube
+volMedReciente = Average[5](volume)
+volMedPrevio   = Average[5](volume)[10]
+precioPlano    = Abs(close - close[10]) / (close + 0.001) * 100 < 15
+volAcumulando  = volMedReciente > volMedPrevio * 1.20
+divAcum        = precioPlano AND volAcumulando
+
+// Tamaño del spike (para output y scoring)
+spikeX = Highest[5](volume) / (avgVol + 0.001)
+
+// ============================================================
+// PILAR 3 — VIGÍA10 GIRANDO AL ALZA
+// ============================================================
+svSube      = sv > sv[1] AND sv[1] > sv[2]
+svConFuerza = (sv - sv[1]) >= (sv[1] - sv[2])
+svDesdePozo = sv[5] < -40 AND sv > sv[5]
+svRemonta   = sv > sv[3] AND sv > sv[5]
+svCruzaPos  = sv > 0 AND sv[3] <= 0
+svSobreMR   = sv > mr
+filtroGira  = filtro > filtro[3] AND filtro > filtro[5]
+
+// Amplitud del salto de SV: el edge visual del MNDR — SV salta bruscamente
+// desde su mínimo reciente → compra institucional súbita detectada por Vigía10
+svRecLow = Lowest[5](sv)
+svJump   = sv - svRecLow
+svSpiked = svJump >= 25
+
+// ============================================================
+// HARD GATE FINAL
+// ============================================================
+baseOk = close >= 0.10 AND close <= 5 AND dolarVol >= 300000 AND bajaNube AND climVol AND (absorcionQuieta OR divAcum) AND (svSube OR svSpiked)
+
+// ============================================================
+// SCORING — calidad de los tres pilares
+// Los hard gates no puntúan: score es genuino
+// ============================================================
+
+// ---- PILAR 1: Posición bajo la nube ----
+s1 = (distMin60 < 10) * 20                         // en mínimos: máximo potencial de rebote
+s2 = (distMin60 >= 10 AND distMin60 < 25) * 12     // cerca de mínimos
+s3 = (rango40 >= 25 AND rango40 < 70) * 10         // lateral largo o caída sostenida bajo la nube
+s4 = (distNube < 15) * 15                          // cerca del borde inferior: rebote rápido posible
+s5 = (distNube >= 15 AND distNube < 30) * 8        // más distancia a la nube: mayor potencial
+s22 = castigado * 12                               // hundido 40%+ bajo máximo 60d: rebote violento posible
+
+// ---- PILAR 2: Calidad de la absorción ----
+s6  = absorcionQuieta * 25                         // SEÑAL CORE: vol alto + precio quieto = absorción
+s7  = divAcum * 15                                 // divergencia vol/precio acumulativa (días)
+s8  = (spikeX >= 5) * 15                          // spike muy potente (5x+)
+s9  = (spikeX >= 3 AND spikeX < 5) * 8           // spike moderado (3-5x)
+
+// ---- TARGETS: proximidad a niveles de rebote natural ----
+s10 = (distEMA21 > 0 AND distEMA21 < 10) * 12     // EMA21 muy cerca: primer target alcanzable
+s11 = (distKijun > 0 AND distKijun < 15) * 10     // Kijun cerca: soporte/resistencia clave
+s12 = (distNube > 0 AND distNube < 10) * 10       // kumoBot muy cerca: pull hacia la nube
+
+// ---- PILAR 3: Calidad del giro Vigía10 ----
+s13 = svDesdePozo * 20                            // sv desde el pozo: giro del peor momento
+s14 = svRemonta * 15                              // sv remontando en 5 días
+s15 = svCruzaPos * 20                            // sv cruza a positivo: señal máxima
+s16 = svConFuerza * 10                           // sv acelerando
+s17 = svSobreMR * 10                             // sv sobre mr: momentum comprador activo
+s18 = filtroGira * 8                             // filtro girando: fondo empieza a mejorar
+s19 = (sv > 0) * 8                              // sv positivo: confirmado
+
+// ---- AMPLITUD DEL SALTO DE SV (edge visual MNDR) ----
+s20 = (svJump >= 40) * 20                          // salto masivo: señal de compra institucional súbita
+s21 = (svJump >= 25 AND svJump < 40) * 12          // salto significativo: presión compradora repentina
+
+// ---- SCORE TOTAL ----
+score = s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14 + s15 + s16 + s17 + s18 + s19 + s20 + s21 + s22
+
+// ---- CONDICIÓN FINAL ----
+condicion = baseOk AND score >= 50
+
+SCREENER[score * condicion](score, distMin60 AS "DistMin%", distNube AS "Nube%", spikeX AS "SpikeX", sv, volRel AS "VolX", close)

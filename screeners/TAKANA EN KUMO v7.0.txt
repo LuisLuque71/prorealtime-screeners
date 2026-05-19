@@ -1,0 +1,189 @@
+// ============================================================
+// SCREENER: TAKANA EN KUMO v7.0
+// NYSE + Nasdaq | Solo largos | Diario
+//
+// REDISEÑO BASADO EN 11 EJEMPLOS REALES — cambios vs v6.0:
+//
+// [FIX CRÍTICO] SSA/SSB ahora desplazados [26]: en v6.0 no lo
+//   estaban, comparando precio con la nube FUTURA (26 barras
+//   adelante) en lugar de la nube VISIBLE hoy en el gráfico.
+//
+// [NUEVO GATE] Kijun plana (kijunRango < 8%): en los 11 ejemplos
+//   la kijun es siempre horizontal — es el soporte magnético que
+//   ancla la Takana. Sin kijun plana no hay rebote fiable.
+//
+// [NUEVO GATE EXPANDIDO] Zona de precio: acepta hasta 7% bajo
+//   kumoBot (precio acercándose a la nube desde abajo). En v6.0
+//   solo se aceptaba precio estrictamente dentro del kumo.
+//
+// [SEÑAL CORE NUEVA] Kumo Twist: nube pasa de roja a verde
+//   (ssa CROSSES OVER ssb). Aparece en 8 de 11 ejemplos.
+//   Máximo peso en scoring: 25+15 pts. barssince lo hace
+//   detectable incluso días después del cruce.
+//
+// [SV MEJORADO] Tres patrones válidos de giro:
+//   · svSube3: 3 barras consecutivas (patrón clásico)
+//   · svTipo4Fresco: SV cruzó 0 hace <= 5 barras (TipoB)
+//   · svSpiked: spike >= 20 puntos desde mínimo de 5 barras
+//   svNoDeep ampliado a -60 (spikes desde zona baja son válidos)
+//
+// [FILTRO] EMA(20) en vez de EMA(50): 4x más reactivo.
+//   EMA(50) = 10 semanas → confirmación llega cuando ya subió 20%.
+//
+// [cSube] Eliminado del hard gate → scoring (s17).
+//   El día exacto de formación de la Takana puede ser neutral.
+//
+// AJUSTE DE SEÑALES:
+//   Pocas → bajar scoreMin a 40 o toleranciaTK a 0.010
+//   Muchas → subir scoreMin a 60 o bajar toleranciaTK a 0.006
+// ============================================================
+
+// ---- PARÁMETROS ----
+toleranciaTK = 0.008   // 0.8%: umbral de fusión tenkan/kijun
+minVelasTK   = 2       // mínimo 2 de 4 barras con Takana activa
+scoreMin     = 50      // umbral de calidad mínima
+
+// ---- VIGÍA10 ----
+// BS=banda sup, BI=banda inf, SV=señal principal, MR=media de SV
+ignored, ignored, BS, BI, ignored, SV, MR, ignored = CALL "Blai5 VIGIA 10"
+filtro = ExponentialAverage[20](SV)
+astro  = SV - MR
+
+// ---- ICHIMOKU (SSA/SSB desplazados [26] — nube VISIBLE hoy) ----
+tenkan  = (Highest[9](High)  + Lowest[9](Low))  / 2
+kijun   = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa0    = (tenkan + kijun) / 2
+ssb0    = (Highest[52](High) + Lowest[52](Low)) / 2
+ssa     = ssa0[26]
+ssb     = ssb0[26]
+kumoTop = Max(ssa, ssb)
+kumoBot = Min(ssa, ssb)
+
+kumoGros = (kumoTop - kumoBot) / (close + 0.001) * 100
+kumoFina = kumoGros < 18
+kumoReal = kumoGros > 1.0
+
+// ---- ZONA DE PRECIO EXPANDIDA ----
+// Dentro de la nube O hasta 7% bajo kumoBot (acercándose desde abajo)
+// El setup más potente ocurre exactamente en kumoBot, no en el centro
+enKumo        = close >= kumoBot AND close <= kumoTop
+bajoKumoCerca = close >= kumoBot * 0.93 AND close < kumoBot
+zonaTakana    = enKumo OR bajoKumoCerca
+
+// ---- TAKANA (fusión tenkan/kijun en 4 últimas barras) ----
+diffTK0 = Abs(tenkan    - kijun)    / (close + 0.001)
+diffTK1 = Abs(tenkan[1] - kijun[1]) / (close + 0.001)
+diffTK2 = Abs(tenkan[2] - kijun[2]) / (close + 0.001)
+diffTK3 = Abs(tenkan[3] - kijun[3]) / (close + 0.001)
+
+countTK        = (diffTK0 < toleranciaTK) + (diffTK1 < toleranciaTK) + (diffTK2 < toleranciaTK) + (diffTK3 < toleranciaTK)
+takanaOk       = countTK >= minVelasTK
+takanaReal     = diffTK0 > 0.0002 AND diffTK0 < toleranciaTK
+tkMid          = (tenkan + kijun) / 2
+takanaAscSuave = tkMid > tkMid[2]
+
+// ---- KIJUN PLANA — nueva puerta (soporte magnético explícito) ----
+// La kijun en los 11 ejemplos es siempre horizontal.
+// Si la kijun desciende, el precio la sigue hacia abajo: no hay rebote.
+kijunH10   = Highest[10](kijun)
+kijunL10   = Lowest[10](kijun)
+kijunRango = (kijunH10 - kijunL10) / (kijun + 0.001) * 100
+kijunFlat  = kijunRango < 8
+
+// ---- KUMO TWIST — señal core nueva ----
+// ssa CROSSES OVER ssb = nube pasa de roja a verde.
+// barssince permite detectarlo incluso días después del cruce.
+// En v6.0 solo se evaluaba si la nube ya era verde (ssa>ssb).
+// Aquí capturamos el MOMENTO DEL GIRO, que es cuando más potencia tiene.
+kumoTwistEvent  = ssa CROSSES OVER ssb
+bsKumoTwist     = barssince(kumoTwistEvent)
+kumoTwistFresco = bsKumoTwist <= 20
+kumoVerde       = ssa > ssb
+futureKumoGreen = ssa0 > ssb0
+
+// ---- VIGÍA10: tres patrones válidos de giro ----
+
+// Patrón 1 — TipoB: SV cruzó sobre cero recientemente (señal más fuerte)
+crossSV0      = SV CROSSES OVER 0
+bsCrossSV0    = barssince(crossSV0)
+svTipo4Fresco = bsCrossSV0 <= 5 AND SV > 0
+
+// Patrón 2 — Clásico: 3 barras consecutivas subiendo
+svSube3 = SV > SV[1] AND SV[1] > SV[2]
+
+// Patrón 3 — Spike: salto >= 20 pts desde mínimo de 5 barras
+// Detecta la compra institucional súbita visible en Vigía10
+svRecLow = Lowest[5](SV)
+svJump   = SV - svRecLow
+svSpiked = svJump >= 20 AND SV > SV[1]
+
+svGirando = svSube3 OR svTipo4Fresco OR svSpiked
+svNoLate  = SV < 50
+svNoDeep  = SV > -60
+
+// ---- LIQUIDEZ ----
+avgVol20 = Average[20](Volume)
+dolarVol  = close * avgVol20
+
+// ================================================================
+// HARD GATE FINAL
+// ================================================================
+baseOk = close >= 1 AND close <= 500 AND dolarVol >= 500000 AND zonaTakana AND kumoFina AND kumoReal AND takanaOk AND takanaReal AND takanaAscSuave AND kijunFlat AND svGirando AND svNoLate AND svNoDeep AND bsKumoTwist <= 25
+
+// ================================================================
+// SCORING — solo factores discriminantes
+// Los hard gates no puntúan: el score es genuino
+// ================================================================
+
+// -- VIGÍA10: calidad del giro --
+s1  = (SV > 0) * 15                          // SV positivo: impulso confirmado
+s2  = (SV > MR) * 10                         // SV sobre MR: momentum activo
+s3  = svSube3 * 10                           // SV acelera 3 barras consecutivas
+s4  = (astro > 0 AND astro[3] <= 0) * 15    // astro acaba de cruzar a positivo
+s5  = (filtro > filtro[3]) * 8              // filtro EMA20 mejorando
+s6  = (MR > 0) * 8                          // MR positivo: presión compradora
+s7  = svTipo4Fresco * 20                    // TipoB: cruce de cero = señal máxima
+s8  = (svJump >= 30) * 12                   // spike potente (30+ pts desde mínimo)
+s8b = (svJump >= 20 AND svJump < 30) * 6   // spike moderado (20-30 pts)
+
+// -- KUMO TWIST: máximo peso (el CORE del edge rediseñado) --
+s9  = kumoTwistFresco * 25                  // twist reciente (<= 20 días)
+s10 = (bsKumoTwist <= 5) * 15              // twist MUY fresco (<= 1 semana)
+s11 = (kumoVerde AND kumoGros < 6) * 20    // nube verde ultra-fina: mínima resistencia
+s12 = (kumoGros < 10) * 10                 // nube delgada
+s13 = futureKumoGreen * 8                  // nube futura verde (proyección alcista)
+s14 = (ssa > ssa[3]) * 6                   // SSA mejorando en 3 días
+
+// -- POSICIÓN Y PRECIO --
+s15 = enKumo * 8                            // dentro de la nube
+s16 = (bajoKumoCerca AND SV > 0) * 15      // bajo nube + SV positivo = breakout inminente
+s17 = (close > close[1]) * 8               // precio sube hoy (bonus, ya no gate duro)
+s18 = (close > Highest[10](close[1])) * 12 // ruptura máximo de 10 días
+
+// -- KIJUN: calidad del soporte --
+s19 = (kijunRango < 3) * 15               // kijun perfectamente plana: imán máximo
+s20 = (kijunRango >= 3 AND kijunRango < 5) * 8
+
+// -- COMPRESIÓN BANDAS VIGÍA10 --
+anchActual = BS - BI
+anchMedia  = Average[20](anchActual)
+s21 = (anchActual < anchMedia * 0.80) * 12  // bandas comprimidas: squeeze activo
+s22 = (SV > BI AND SV < BS AND svSube3) * 8 // SV dentro de bandas y subiendo
+
+// -- VOLUMEN --
+volRel = Volume / avgVol20
+s23 = (volRel >= 1.5) * 12
+s24 = (volRel >= 1.2 AND volRel < 1.5) * 6
+
+// ---- SCORE TOTAL ----
+score = s1+s2+s3+s4+s5+s6+s7+s8+s8b+s9+s10+s11+s12+s13+s14+s15+s16+s17+s18+s19+s20+s21+s22+s23+s24
+
+// ---- CONDICIÓN FINAL ----
+condicion = baseOk AND score >= scoreMin
+
+// Columnas: Score · Fusion% (cuanto más bajo, más apretada la TK)
+//           Nube% (grosor) · KijFlt% (kijun flat: menos=mejor)
+//           BsTwist (barras desde kumo twist: menos=mejor)
+//           BsSV0 (barras desde TipoB: menos=mejor)
+//           SV · Filtro
+SCREENER[score * condicion](score AS "Score", diffTK0 * 100 AS "Fusion%", kumoGros AS "Nube%", kijunRango AS "KijFlt%", bsKumoTwist AS "BsTwist", bsCrossSV0 AS "BsSV0", SV AS "SV", filtro AS "Filtro")

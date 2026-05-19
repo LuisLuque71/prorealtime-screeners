@@ -1,0 +1,68 @@
+// ============================================================
+// KONCORDE ACUMULACION + PRIMAVERA COMBINADO v1.0
+// Captura el ciclo completo en un solo screener:
+//   ACUMULACION: azul>verde, institucionales dominan, verde girando
+//   PRIMAVERA:   verde>0 + azul>0 + precio sobre nube Ichimoku
+// Para saber la fase: si Close > Nube → Primavera / si Close < Nube → Acumulacion
+// Timeframe: DIARIO
+// Si salen 0: baja minVolDolar a 250000
+// Si salen demasiados: sube minVolDolar a 2000000
+// ============================================================
+
+// ---- PARAMETROS ----
+minVolDolar = 500000
+minPrice    = 5
+maxPrice    = 500
+
+m = 3
+
+// ---- KONCORDE ----
+pvi = PositiveVolumeIndex(close)
+pvim = ExponentialAverage[m](pvi)
+pvimax = Highest[90](pvim)
+pvimin = Lowest[90](pvim)
+oscp = (pvi - pvim) * 100 / Max(pvimax - pvimin, 0.001)
+
+nvi = NegativeVolumeIndex(close)
+nvim = ExponentialAverage[m](nvi)
+nvimax = Highest[90](nvim)
+nvimin = Lowest[90](nvim)
+azul = (nvi - nvim) * 100 / Max(nvimax - nvimin, 0.001)
+
+xmf = MoneyFlowIndex[14]
+OB1 = (BollingerUp[25](TotalPrice) + BollingerDown[25](TotalPrice)) / 2
+OB2 = Max(BollingerUp[25](TotalPrice) - BollingerDown[25](TotalPrice), 0.001)
+BollOsc = ((TotalPrice - OB1) / OB2) * 100
+xrsi = RSI[14](TotalPrice)
+STOC = Stochastic[21,3](TotalPrice)
+marron = (xrsi + xmf + BollOsc + (STOC / 3)) / 2
+verde = marron + oscp
+media = ExponentialAverage[m](marron)
+
+// ---- VIGIA10 ----
+ignored, ignored, ignored, ignored, ignored, filtro, sv, ignored = CALL "Blai5 VIGIA 10"
+
+// ---- ICHIMOKU ----
+tenkan  = (Highest[9](High)  + Lowest[9](Low))  / 2
+kijun   = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa0    = (tenkan + kijun) / 2
+ssb0    = (Highest[52](High) + Lowest[52](Low)) / 2
+ssa     = ssa0[26]
+ssb     = ssb0[26]
+kumoTop = Max(ssa, ssb)
+
+// ---- FILTROS BASICOS ----
+volDolar = Average[20](Volume * Close)
+cBase = volDolar >= minVolDolar AND Close >= minPrice AND Close <= maxPrice
+
+// ---- BLOQUE ACUMULACION ----
+// Institucionales dominan (azul>verde), verde empieza a girar al alza
+acumOK = azul > 0 AND azul > verde AND azul > azul[1] AND verde > verde[1] AND verde > verde[3] AND filtro > filtro[1]
+
+// ---- BLOQUE PRIMAVERA ----
+// Verde y azul positivos, precio sobre nube, Vigia10 positivo y creciendo
+primOK = verde > 0 AND azul > 0 AND verde > marron AND marron > media AND close > kumoTop AND tenkan > kijun AND filtro > 0 AND filtro > filtro[1]
+
+condicion = cBase AND (acumOK OR primOK)
+
+SCREENER[condicion](verde AS "Verde", azul AS "Azul", filtro AS "Filtro", sv AS "SV", kumoTop AS "Nube", kijun AS "Kijun", Close AS "Precio")

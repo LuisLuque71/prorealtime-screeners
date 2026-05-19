@@ -1,0 +1,84 @@
+// ============================================================
+// KONCORDE DISTRIBUCION v1.1
+// Institucionales saliendo (Azul<0), retail aun comprando
+// Precio pierde nube + Tenkan<Kijun + Filtro Vigia10 negativo
+// Señal de salida o posicion corta · Timeframe: DIARIO
+// Si salen 0: sube bsAzulMax a 20 o baja minVolDolar a 1000000
+// Si salen demasiados: baja bsAzulMax a 5 o sube minVolDolar a 3000000
+// ============================================================
+
+// ---- PARAMETROS ----
+bsAzulMax   = 10     // barras desde que azul cruzo bajo cero (salida institucional fresca)
+minVolDolar = 3000000
+minPrice    = 5
+maxPrice    = 500
+
+m = 3
+
+// ---- KONCORDE ----
+pvi = PositiveVolumeIndex(close)
+pvim = ExponentialAverage[m](pvi)
+pvimax = Highest[90](pvim)
+pvimin = Lowest[90](pvim)
+oscp = (pvi - pvim) * 100 / Max(pvimax - pvimin, 0.001)
+
+nvi = NegativeVolumeIndex(close)
+nvim = ExponentialAverage[m](nvi)
+nvimax = Highest[90](nvim)
+nvimin = Lowest[90](nvim)
+azul = (nvi - nvim) * 100 / Max(nvimax - nvimin, 0.001)
+
+xmf = MoneyFlowIndex[14]
+OB1 = (BollingerUp[25](TotalPrice) + BollingerDown[25](TotalPrice)) / 2
+OB2 = Max(BollingerUp[25](TotalPrice) - BollingerDown[25](TotalPrice), 0.001)
+BollOsc = ((TotalPrice - OB1) / OB2) * 100
+xrsi = RSI[14](TotalPrice)
+STOC = Stochastic[21,3](TotalPrice)
+marron = (xrsi + xmf + BollOsc + (STOC / 3)) / 2
+verde = marron + oscp
+
+// ---- VIGIA10 ----
+ignored, ignored, ignored, ignored, ignored, filtro, sv, ignored = CALL "Blai5 VIGIA 10"
+
+// ---- ICHIMOKU ----
+tenkan = (Highest[9](High) + Lowest[9](Low)) / 2
+kijun  = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa0   = (tenkan + kijun) / 2
+ssb0   = (Highest[52](High) + Lowest[52](Low)) / 2
+ssa    = ssa0[26]
+ssb    = ssb0[26]
+kumoTop = Max(ssa, ssb)
+
+// ---- FILTROS BASICOS ----
+volDolar = Average[20](Volume * Close)
+cBase = volDolar >= minVolDolar AND Close >= minPrice AND Close <= maxPrice
+
+// ---- KONCORDE: distribucion fresca ----
+// Azul recien cruzado bajo cero: institucionales acaban de empezar a salir
+crossAzulNeg = azul CROSSES UNDER 0
+bsAzul       = barssince(crossAzulNeg)
+cK1 = bsAzul <= bsAzulMax AND azul < 0
+
+// Azul cayendo: la salida institucional continua
+cK2 = azul < azul[1]
+
+// Verde significativo: retail MUY comprado (trampa real, no stock ya debil)
+cK3 = verde > 20
+
+// Retail comprando en dias de alto volumen: trampa maxima (oscp > 0)
+cK4 = verde > marron
+
+// Marron girando a la baja: momentum retail empieza a ceder
+cK5 = marron < marron[1]
+
+// ---- ICHIMOKU: soporte perdido ----
+cI1 = close < kumoTop
+cI2 = tenkan < kijun
+
+// ---- VIGIA10: momentum negativo y cayendo ----
+cV1 = filtro < 0
+cV2 = filtro < filtro[1]
+
+condicion = cBase AND cK1 AND cK2 AND cK3 AND cK4 AND cK5 AND cI1 AND cI2 AND cV1 AND cV2
+
+SCREENER[condicion](verde - azul AS "Trampa", bsAzul AS "BsAzul", verde AS "Verde", azul AS "Azul", filtro AS "Filtro", sv AS "SV", Close AS "Precio")

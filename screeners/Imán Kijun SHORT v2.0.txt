@@ -1,0 +1,191 @@
+// ============================================================
+// SCREENER: Imán Kijun SHORT v2.0
+// NYSE/NASDAQ - Daily
+// Filosofía: stock en downtrend confirmado (siempre bajo la nube)
+// con rebote temporal sobre el kijun → continuación bajista al kijun.
+// Variante B integrada: rechazo explícito de nube = máxima prioridad.
+// ============================================================
+// AVISO: Preferentemente para PUT options. Short directo solo en
+// stocks con dolarVol > $5M para evitar riesgo de squeeze.
+// Ajuste si pocas señales: baja cDist mínimo a 15 o baja scoreMin a 50
+// ============================================================
+
+// --- HARD GATES (precio y liquidez) ---
+dolarVol  = close * average[20](volume)
+cPrecio   = close >= 2 AND close <= 50
+cVolumen  = dolarVol >= 1000000
+
+// --- ICHIMOKU ---
+tenkan = (Highest[9](High)  + Lowest[9](Low))  / 2
+kijun  = (Highest[26](High) + Lowest[26](Low)) / 2
+
+// Kumo actual (desplazado 26 barras)
+ssa0 = (tenkan + kijun) / 2
+ssb0 = (Highest[52](High) + Lowest[52](Low)) / 2
+ssa  = ssa0[26]
+ssb  = ssb0[26]
+
+nubeTop    = Max(ssa, ssb)
+nubeBot    = Min(ssa, ssb)
+nubeGrosor = (nubeTop - nubeBot) / (nubeBot + 0.0001) * 100
+
+// Niveles de nubeBot en barras anteriores (para detectar rechazo y confirmar downtrend)
+nubeBot1  = Min(ssa[1],  ssb[1])
+nubeBot2  = Min(ssa[2],  ssb[2])
+nubeBot3  = Min(ssa[3],  ssb[3])
+nubeBot5  = Min(ssa[5],  ssb[5])
+nubeBot10 = Min(ssa[10], ssb[10])
+nubeBot20 = Min(ssa[20], ssb[20])
+
+// Profundidad bajo la nube (cuanto más lejos, más confirmado el downtrend)
+distBelowCloud = (nubeBot - close) / (nubeBot + 0.0001) * 100
+
+// --- KIJUN: target bajista ---
+kijunHigh10 = Highest[10](kijun)
+kijunLow10  = Lowest[10](kijun)
+kijunRango  = (kijunHigh10 - kijunLow10) / (kijun + 0.0001) * 100
+
+// --- ESTRUCTURA BAJISTA CONFIRMADA (gate central) ---
+// Precio siempre bajo la nube = Ichimoku confirma downtrend
+// La nube refleja precios históricos más altos → resistencia natural arriba
+cBajoNube = close < nubeBot
+
+// --- REBOTE SOBRE KIJUN (goma estirada hacia arriba) ---
+cAbove    = close > kijun
+distAbove = (close - kijun) / (kijun + 0.0001) * 100
+cDist     = distAbove >= 20 AND distAbove <= 60
+
+// --- VIGÍA10 ---
+ignored, ignored, ignored, ignored, ignored, filtro, sv, mr = CALL "Blai5 VIGIA 10"
+
+// --- SV GIRANDO A LA BAJA (rebote perdiendo fuerza) ---
+svBajando  = sv < sv[1]
+svBajando2 = sv < sv[1] AND sv[1] < sv[2]
+
+// --- CONVERGENCIA ACTIVA HOY ---
+// La distancia al kijun ya se acorta: precio cayendo hacia el objetivo
+cReversionActiva = distAbove < distAbove[1]
+
+// --- HARD GATE FINAL ---
+baseOk = cPrecio AND cVolumen AND cBajoNube AND cAbove AND cDist AND svBajando AND cReversionActiva
+
+// ============================================================
+// SCORING — Variante B integrada con máximo peso
+// ============================================================
+
+// ============================================================
+// BLOQUE 1: RECHAZO DE LA NUBE (Variante B — el edge principal)
+// Precio intentó superar la nube y fue rechazado: señal más fiable
+// ============================================================
+
+// Cierre dentro o sobre la nube ayer, hoy rechazado bajo
+s1 = (close[1] >= nubeBot1 AND close < nubeBot) * 30
+
+// Mecha (High) dentro de la nube ayer, cierre bajo (wick rejection)
+s2 = (High[1] > nubeBot1 AND close[1] < nubeBot1) * 25
+
+// Patrón de rechazo hace 2 o 3 barras (rebote más reciente)
+s3 = (close[2] >= nubeBot2 AND close[1] < nubeBot2 AND close < nubeBot) * 20
+s4 = (close[3] >= nubeBot3 AND close[2] < nubeBot3 AND close < nubeBot) * 15
+
+// ============================================================
+// BLOQUE 2: CALIDAD DE LA ESTRUCTURA BAJISTA
+// ============================================================
+
+// Nube roja actual (Senkou A < Senkou B): estructura bajista robusta
+s5 = (ssa < ssb) * 12
+// Nube futura también bajista: próximas 26 sesiones en contra
+s6 = (ssa0 < ssb0) * 8
+// Nube gruesa: cuanto más gruesa, mayor la resistencia overhead
+s7 = (nubeGrosor > 10) * 8
+
+// ============================================================
+// BLOQUE 3: KIJUN — CALIDAD DEL TARGET
+// ============================================================
+
+// Kijun muy plano: target prácticamente fijo, reversión limpia
+s8  = (kijunRango < 3) * 20
+s9  = (kijunRango >= 3 AND kijunRango < 6) * 12
+s10 = (kijunRango >= 6 AND kijunRango < 10) * 5
+// Kijun bajando suavemente: el target desciende hacia el precio
+s11 = (kijun < kijun[5]) * 8
+
+// ============================================================
+// BLOQUE 4: POTENCIAL DE RECORRIDO
+// ============================================================
+
+// Distancia grande domina el ranking vía multiplicador; el scoring
+// también premia más cuanto mayor es la distancia al kijun
+s12 = (distAbove >= 20 AND distAbove < 30) * 10   // entrada mínima
+s13 = (distAbove >= 30 AND distAbove < 45) * 20   // zona óptima
+s14 = (distAbove >= 45 AND distAbove <= 60) * 18  // zona extendida
+
+// Convergencia sostenida 3 barras: no es solo el primer día
+s15 = (distAbove < distAbove[3]) * 15
+
+// ============================================================
+// BLOQUE 5: VIGÍA10 — AGOTAMIENTO DEL REBOTE
+// ============================================================
+
+// Giro bajista confirmado 2 barras consecutivas
+s16 = svBajando2 * 15
+// sv por debajo de mr: impulso vendedor activo
+s17 = (sv < mr) * 10
+// sv cruzó a negativo: señal bajista plena de Vigía10
+s18 = (sv < 0) * 12
+// Filtro deteriorándose: tendencia de fondo acompañando
+s19 = (filtro < filtro[3]) * 10
+// Filtro ya negativo: Vigía confirma estructura bajista
+s20 = (filtro < 0) * 8
+
+// ============================================================
+// BLOQUE 6: CONFIRMACIÓN DE PRECIO Y VOLUMEN
+// ============================================================
+
+// Vela bajista hoy
+s21 = (close < open) * 10
+// Precio cayendo vs ayer
+s22 = (close < close[1]) * 8
+
+// Volumen alto en vela bajista: distribución institucional
+volRel = volume / average[20](volume)
+s23 = (volRel >= 1.5 AND close < open) * 15
+s24 = (volRel >= 1.2 AND volRel < 1.5 AND close < open) * 8
+
+// Tenkan girando a la baja: media corta acompaña la caída
+s25 = (tenkan < tenkan[3]) * 8
+// Precio ya bajo la media corta: caída confirmada en el corto plazo
+s26 = (close < tenkan) * 8
+
+// ============================================================
+// BLOQUE 7: PROFUNDIDAD BAJO LA NUBE (calidad del downtrend)
+// Cuanto más lejos de la nube, más establecida es la estructura bajista
+// ============================================================
+
+// Stock bien alejado de la nube: downtrend robusto, no recién iniciado
+s27 = (distBelowCloud > 5)  * 8
+s28 = (distBelowCloud > 15) * 10
+s29 = (distBelowCloud > 25) * 8
+
+// ============================================================
+// BLOQUE 8: HISTORIAL BAJO LA NUBE (persistencia del downtrend)
+// No basta con estar bajo la nube hoy; el downtrend debe ser establecido
+// ============================================================
+
+// Bajo la nube también hace 5, 10 y 20 barras: downtrend confirmado
+s30 = (close[5]  < nubeBot5)  * 8
+s31 = (close[10] < nubeBot10) * 10
+s32 = (close[20] < nubeBot20) * 12
+
+// --- SCORE TOTAL ---
+score = s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14 + s15 + s16 + s17 + s18 + s19 + s20 + s21 + s22 + s23 + s24 + s25 + s26 + s27 + s28 + s29 + s30 + s31 + s32
+
+// --- CONDICIÓN FINAL ---
+// Umbral 65 sobre el score de calidad
+condicion = baseOk AND score >= 65
+
+// Ranking: score * distAbove — la distancia grande domina el orden.
+// Ejemplo: score=120 distAbove=45 → orden=5400
+//          score=150 distAbove=22 → orden=3300
+// El stock con goma más estirada sube aunque tenga score menor.
+SCREENER[score * distAbove * condicion](score, distAbove AS "Dist%", sv, mr, filtro, close, volRel)

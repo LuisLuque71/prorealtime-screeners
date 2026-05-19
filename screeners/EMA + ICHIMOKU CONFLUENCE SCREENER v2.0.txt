@@ -1,0 +1,108 @@
+// ============================================================
+// SCREENER: EMA + ICHIMOKU CONFLUENCE v2.0
+// NYSE + Nasdaq | Largos | Diario
+// Filosofía: stock en uptrend (sobre EMA200 y sobre la nube),
+// corrección que toca EMA21 o Kijun como soporte → rebote
+// con sv del Vigía girando al alza. Edge: cuando EMA21 y Kijun
+// coinciden en precio, el soporte es doble → alta probabilidad.
+// Ajuste si pocas señales: baja scoreMin a 60, distEMAKijun a 5 o dolarVol a 3M
+// ============================================================
+
+// ---- VIGÍA10 ----
+ignored, ignored, ignored, ignored, ignored, filtro, sv, mr = CALL "Blai5 VIGIA 10"
+
+// ---- EMAs ----
+emaSwing = ExponentialAverage[21](close)
+emaTrend = ExponentialAverage[50](close)
+emaLong  = ExponentialAverage[200](close)
+
+// ---- ICHIMOKU ----
+tenkan  = (Highest[9](High)  + Lowest[9](Low))  / 2
+kijun   = (Highest[26](High) + Lowest[26](Low)) / 2
+senkoua = (tenkan + kijun) / 2
+senkoud = (Highest[52](High) + Lowest[52](Low)) / 2
+nubea   = senkoua[26]
+nubeb   = senkoud[26]
+
+// ---- LIQUIDEZ ----
+volmed   = Average[20](volume)
+dolarVol = close * volmed
+volRel   = volume / volmed
+
+// ---- DISTANCIAS AL SOPORTE ----
+distEMA      = Abs(close - emaSwing) / emaSwing * 100
+distKijun    = Abs(close - kijun)    / kijun    * 100
+
+// ---- CONFLUENCIA EMA21 + KIJUN ----
+// El edge del screener: cuando EMA21 y Kijun convergen,
+// dos sistemas independientes señalan el mismo soporte
+distEMAKijun = Abs(emaSwing - kijun) / close * 100
+
+// ---- TOQUE DE SOPORTE HOY (entry timing) ----
+// Mecha inferior que prueba el nivel con precisión y cierra por encima
+tocaEMA   = Low <= emaSwing * 1.005 AND close >= emaSwing
+tocaKijun = Low <= kijun    * 1.005 AND close >= kijun
+tocaZona  = tocaEMA OR tocaKijun
+
+// ---- VIGÍA10 ----
+svSube      = sv > sv[1]
+svSube2     = sv > sv[1] AND sv[1] > sv[2]
+svConFuerza = (sv - sv[1]) >= (sv[1] - sv[2])
+
+// ---- ESTRUCTURA ALCISTA (base) ----
+estructura = close > emaLong AND close > nubea AND close > nubeb AND close > kijun
+
+// ---- SEÑAL DE ENTRADA ----
+// 2 días de corrección previa confirman pullback real, no simple pausa
+entrada = svSube AND close > close[1] AND close[1] < close[2] AND close[2] < close[3] AND tocaZona
+
+// ---- HARD GATE FINAL ----
+// distEMAKijun < 3: EMA21 y Kijun deben converger → es el edge del screener
+// dolarVol >= 5M: stocks líquidos con opciones accesibles (20-day avg, válido en previa)
+baseOk = close >= 10 AND dolarVol >= 5000000 AND distEMAKijun < 3 AND estructura AND entrada
+
+// ============================================================
+// SCORING — calidad de la confluencia y del rebote
+// Los hard gates no puntúan: score genuino
+// ============================================================
+
+// ---- CONFLUENCIA EMA21 + KIJUN (el edge central) ----
+s1 = (distEMAKijun < 1) * 20          // confluencia perfecta: soporte doble < 1%
+s2 = (distEMAKijun >= 1 AND distEMAKijun < 2) * 12  // confluencia buena
+s3 = (distEMAKijun >= 2 AND distEMAKijun < 3) * 6   // confluencia moderada
+
+// ---- TOQUE PRECISO DEL SOPORTE ----
+s4 = tocaEMA   * 15                   // wick en EMA21: nivel testado y aguanta
+s5 = tocaKijun * 15                   // wick en Kijun: nivel Ichimoku testado
+
+// ---- ESTRUCTURA EMA ----
+s6 = (emaSwing > emaTrend) * 10       // EMA21 > EMA50: momentum alineado
+s7 = (close > emaTrend) * 8           // precio sobre EMA50: tendencia media intacta
+s8 = (distEMA < 1) * 10              // precio muy pegado a EMA21
+
+// ---- ESTRUCTURA ICHIMOKU ----
+s9  = (nubea > nubeb) * 12            // nube alcista: estructura Ichimoku sólida
+s10 = (tenkan > kijun) * 8            // TK alcista: momentum corto plazo positivo
+s11 = (filtro > 0) * 8                // filtro positivo: fondo alcista
+s12 = (distKijun < 2) * 10           // precio muy cerca del kijun
+
+// ---- VIGÍA10 — calidad del giro ----
+s13 = svSube2 * 12                    // 2 barras sv al alza: giro confirmado
+s14 = svConFuerza * 10                // sv acelerando: momentum ganando fuerza
+s15 = (sv > mr) * 10                  // sv sobre mr: impulso comprador activo
+s16 = (sv > 0) * 12                   // sv positivo: señal alcista plena
+
+// ---- VOLUMEN — calidad del rebote ----
+// Pullback ideal: corrección en volumen bajo, rebote en volumen alto
+s17 = (Average[3](volume) < volmed * 0.8) * 10  // los 3 días previos en bajo volumen
+s18 = (volRel >= 1.5 AND close > open) * 15     // rebote hoy con volumen alto: convicción
+s19 = (close > open) * 8                        // vela alcista confirmando el rebote
+
+// ---- SCORE TOTAL ----
+score = s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14 + s15 + s16 + s17 + s18 + s19
+
+// ---- CONDICIÓN FINAL ----
+condicion = baseOk AND score >= 80
+
+// Ranking: score domina, Confluencia% como desempate
+SCREENER[score * condicion](score, distEMAKijun AS "Confluencia%", distEMA AS "DistEMA%", sv, close, volRel)

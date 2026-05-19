@@ -1,0 +1,177 @@
+// ============================================================
+// SCREENER VIGIA10 + ICHIMOKU + KONCORDE — REBOTE EN SOPORTE v2.0 DIARIO
+// Tendencia previa → Corrección → Toque soporte → Rebote institucional
+// Tres capas: Estructura (Ichimoku) + Momentum (Vigia10) + Institucional (Koncorde)
+// Ventana toque: 2-8 sesiones · Objetivo: +15-20%
+// Timeframe: DIARIO · Alta convicción · Pocas señales
+// ============================================================
+// Pocas señales: bajar scoreMin a 120 o scoreQualMin a 70 o tramoMin a 0.15
+// Muchas señales: subir scoreMin a 180 o tramoMin a 0.25
+// ============================================================
+
+// ---- PARAMETROS ----
+minVolDolar    = 500000
+minPrice       = 8
+maxPrice       = 500
+tolerSoporte   = 0.040
+tolerFrio      = 0.045
+kijunSlopeBars = 10
+minTendPrevia  = 0.10
+scoreMin       = 150
+scoreQualMin   = 80
+tramoMin       = 0.20
+rebotePctMin   = 0.02
+m              = 3
+
+// ---- VIGIA10 ----
+ignored, vpm, astro, ignored, ignored, filtro, sv, mr = CALL "Blai5 VIGIA 10"
+avgVpm = Average[20](vpm)
+filtroPosNow = filtro > 0
+filtroGirando = filtro > filtro[2]
+svPos = sv > 0
+astroPos = astro > 0
+vpmOk = vpm >= avgVpm
+svSobreMR = sv > mr OR (sv > sv[1] AND sv > sv[2])
+
+// ---- KONCORDE ----
+nvi = NegativeVolumeIndex(close)
+nvim = ExponentialAverage[m](nvi)
+nvimax = Highest[90](nvim)
+nvimin = Lowest[90](nvim)
+azul = (nvi - nvim) * 100 / Max(nvimax - nvimin, 0.001)
+azulPos = azul > 0
+azulGirando = azul > azul[2]
+azulEnSoporte = azul[2] > 0 OR azul[3] > 0 OR azul[4] > 0 OR azul[5] > 0 OR azul[6] > 0 OR azul[7] > 0 OR azul[8] > 0
+divergenciaAlc = azul > azul[3] AND close < close[3]
+koncordeOk = azulPos OR azulEnSoporte
+
+// ---- ICHIMOKU ----
+tenkan = (Highest[9](High) + Lowest[9](Low)) / 2
+kijun  = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa0   = (tenkan + kijun) / 2
+ssb0   = (Highest[52](High) + Lowest[52](Low)) / 2
+ssa    = ssa0[26]
+ssb    = ssb0[26]
+kumoBot = Min(ssa, ssb)
+kumoAlcista = ssa > ssb
+
+// ---- MEDIAS ----
+ma200 = Average[200](close)
+ma50  = Average[50](close)
+ma50Slope  = ma50 > ma50[10]
+ma50Rising = ma50 > ma50[5] AND ma50[5] > ma50[10]
+
+// ---- LIQUIDEZ Y PRECIO ----
+volDolarMed = Average[20](Volume * close)
+volDolarHoy = Volume * close
+cLiquidez = volDolarMed >= minVolDolar AND volDolarHoy >= minVolDolar * 0.4
+cPrecio = close >= minPrice AND close <= maxPrice
+
+// ---- TENDENCIA PREVIA — max60 + ma50 alcista (descarta caidas libres) ----
+max60 = Highest[60](High)
+tendenciaPrevia = max60 > close * (1 + minTendPrevia) AND ma50Slope
+
+// ---- DETECCIÓN TOQUE SOPORTE (ventana 2-8 sesiones) ----
+// Sesiones 2-3: calientes — tolerancia estándar
+// Sesiones 6-8: frías — tolerancia +0.5% más amplia
+tK2 = Abs(close[2] - kijun[2]) / (kijun[2] + 0.0001) < tolerSoporte
+tK3 = Abs(close[3] - kijun[3]) / (kijun[3] + 0.0001) < tolerSoporte
+tK4 = Abs(close[4] - kijun[4]) / (kijun[4] + 0.0001) < tolerSoporte
+tK5 = Abs(close[5] - kijun[5]) / (kijun[5] + 0.0001) < tolerSoporte
+tK6 = Abs(close[6] - kijun[6]) / (kijun[6] + 0.0001) < tolerFrio
+tK7 = Abs(close[7] - kijun[7]) / (kijun[7] + 0.0001) < tolerFrio
+tK8 = Abs(close[8] - kijun[8]) / (kijun[8] + 0.0001) < tolerFrio
+tocoKijunCaliente = tK2 OR tK3
+tocoKijun = tK2 OR tK3 OR tK4 OR tK5 OR tK6 OR tK7 OR tK8
+tS2 = Abs(close[2] - ssb[2]) / (ssb[2] + 0.0001) < tolerSoporte
+tS3 = Abs(close[3] - ssb[3]) / (ssb[3] + 0.0001) < tolerSoporte
+tS4 = Abs(close[4] - ssb[4]) / (ssb[4] + 0.0001) < tolerSoporte
+tS5 = Abs(close[5] - ssb[5]) / (ssb[5] + 0.0001) < tolerSoporte
+tS6 = Abs(close[6] - ssb[6]) / (ssb[6] + 0.0001) < tolerFrio
+tS7 = Abs(close[7] - ssb[7]) / (ssb[7] + 0.0001) < tolerFrio
+tS8 = Abs(close[8] - ssb[8]) / (ssb[8] + 0.0001) < tolerFrio
+tocoSSBCaliente = tS2 OR tS3
+tocoSSB = tS2 OR tS3 OR tS4 OR tS5 OR tS6 OR tS7 OR tS8
+tE2 = Abs(close[2] - ma200[2]) / (ma200[2] + 0.0001) < tolerSoporte
+tE3 = Abs(close[3] - ma200[3]) / (ma200[3] + 0.0001) < tolerSoporte
+tE4 = Abs(close[4] - ma200[4]) / (ma200[4] + 0.0001) < tolerSoporte
+tE5 = Abs(close[5] - ma200[5]) / (ma200[5] + 0.0001) < tolerSoporte
+tE6 = Abs(close[6] - ma200[6]) / (ma200[6] + 0.0001) < tolerFrio
+tE7 = Abs(close[7] - ma200[7]) / (ma200[7] + 0.0001) < tolerFrio
+tE8 = Abs(close[8] - ma200[8]) / (ma200[8] + 0.0001) < tolerFrio
+tocoMA200 = tE2 OR tE3 OR tE4 OR tE5 OR tE6 OR tE7 OR tE8
+tocoSoporteOk = tocoKijun OR tocoSSB
+tocoCaliente = tocoKijunCaliente OR tocoSSBCaliente
+tocoDoble = tocoKijun AND tocoSSB
+tocoTriple = tocoKijun AND tocoSSB AND tocoMA200
+
+// ---- CONFIRMACIÓN REBOTE ----
+// rebotePct: distancia real desde el mínimo del toque en la ventana 2-8 (mínimo 2%)
+sobreKijun = close > kijun
+sobreSSB = close > ssb
+confirmacion1 = close[1] > close[2]
+confirmacion2 = close[1] > close[2] AND close > close[1]
+slope3 = (close - close[3]) / (close[3] + 0.0001)
+minToque = Lowest[7](Low)[2]
+rebotePct = (close - minToque) / (minToque + 0.0001)
+reboteActivo = slope3 > 0 AND close > close[1] AND rebotePct >= rebotePctMin
+
+// ---- ICHIMOKU FONDO SANO ----
+kijunRising = kijun > kijun[kijunSlopeBars]
+chikouLibre = close > close[26]
+kumoFuturaAlc = ssa0 > ssb0
+precioEnZonaAlcista = close > kumoBot OR kumoAlcista
+
+// ---- RECORRIDO LIBRE AL MÁXIMO ----
+recorridoLibre = (max60 - close) / (close + 0.0001)
+recorridoCap = Min(recorridoLibre, 0.30)
+
+// ============================================================
+// HARD GATE
+// ============================================================
+baseOk = cLiquidez AND cPrecio AND tendenciaPrevia AND tocoSoporteOk AND reboteActivo AND (sobreKijun OR sobreSSB) AND svPos AND filtroGirando AND precioEnZonaAlcista AND koncordeOk AND recorridoLibre >= tramoMin
+
+// ============================================================
+// SCORING — scoreQual (señales puras) + recorrido capado al 30%
+// Los hard gates no puntúan — el score es genuino
+// ============================================================
+
+// -- SOPORTE ICHIMOKU --
+sQ1  = tocoSSB * 25               // tocó SSB: soporte de nube mayor
+sQ2  = tocoKijun * 20             // tocó Kijun: soporte dinámico principal
+sQ3  = tocoMA200 * 10             // tocó MA200: soporte largo plazo
+sQ4  = tocoDoble * 30             // doble toque: convergencia de soportes
+sQ5  = tocoTriple * 80            // triple toque: confluencia máxima
+sQ6  = tocoCaliente * 20          // toque en sesión 2-3: frescura máxima
+
+// -- CONFIRMACIÓN REBOTE --
+sQ7  = confirmacion2 * 20         // dos velas alcistas consecutivas
+sQ8  = confirmacion1 * 10         // una vela de confirmación
+
+// -- ICHIMOKU FONDO --
+sQ9  = kumoAlcista * 10           // nube verde: estructura alcista
+sQ10 = kijunRising * 12           // kijun ascendente: soporte dinámico sube
+sQ11 = chikouLibre * 8            // chikou en zona libre
+sQ12 = kumoFuturaAlc * 8          // nube futura alcista: proyección positiva
+sQ13 = ma50Rising * 8             // ma50 ascendente: tendencia media sana
+
+// -- VIGIA10 --
+sQ14 = filtroPosNow * 18          // filtro positivo: momentum de fondo activo
+sQ15 = filtroGirando * 10         // filtro girando: aceleración del momentum
+sQ16 = svSobreMR * 12             // SV sobre MR o en aceleración
+sQ17 = vpmOk * 5                  // VPM sobre su media de 20 sesiones
+sQ18 = astroPos * 5               // Astro positivo
+
+// -- KONCORDE — presión institucional --
+sQ19 = azulPos * 20               // manos fuertes activas ahora mismo
+sQ20 = azulGirando * 15           // manos fuertes acelerando
+sQ21 = azulEnSoporte * 25         // institucionales compraban en el toque
+sQ22 = divergenciaAlc * 35        // divergencia alcista: acumulación silenciosa
+
+scoreQual = sQ1+sQ2+sQ3+sQ4+sQ5+sQ6+sQ7+sQ8+sQ9+sQ10+sQ11+sQ12+sQ13+sQ14+sQ15+sQ16+sQ17+sQ18+sQ19+sQ20+sQ21+sQ22
+scoreTotal = scoreQual + recorridoCap * 150
+
+// ---- CONDICIÓN FINAL ----
+condicion = baseOk AND scoreTotal >= scoreMin AND scoreQual >= scoreQualMin
+
+SCREENER[condicion](scoreTotal AS "Score", scoreQual AS "ScoreQ", recorridoLibre*100 AS "Tramo%", rebotePct*100 AS "Rebote%", tocoTriple AS "Triple", tocoDoble AS "Doble", tocoCaliente AS "Caliente", confirmacion2 AS "2Conf", azulPos AS "AzulPos", azulEnSoporte AS "AzulSop", divergenciaAlc AS "DivAlc", sv AS "SV", filtro AS "Filtro", close AS "Precio")

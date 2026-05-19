@@ -1,0 +1,138 @@
+// ============================================================
+// SCREENER: VIGIA10 SNIPER SQUEEZE — MID STOCKS v1.0
+// NYSE + Nasdaq | Largos | Diario | $5-$50
+// Filosofía: consolidación larga + volumen climático de absorción
+// (institucionales acumulando dentro del rango) + Vigía10 sv
+// girando al alza → pre-squeeze inminente. Wyckoff Phase C.
+// Ajuste si pocas señales: sube volClimatico a 1.5x o baja scoreMin a 50
+// ============================================================
+
+// ---- VIGÍA10 ----
+ignored, ignored, ignored, ignored, ignored, filtro, sv, mr = CALL "Blai5 VIGIA 10"
+
+// ---- LIQUIDEZ ----
+avgVol   = Average[20](volume)
+dolarVol = close * avgVol
+volRel   = volume / avgVol
+
+// ---- ICHIMOKU ----
+tenkan  = (Highest[9](High)  + Lowest[9](Low))  / 2
+kijun   = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa0    = (tenkan + kijun) / 2
+ssb0    = (Highest[52](High) + Lowest[52](Low)) / 2
+kumoTop = Max(ssa0, ssb0)
+kumoBot = Min(ssa0, ssb0)
+
+// ============================================================
+// PILAR 1 — CONSOLIDACIÓN LARGA
+// Precio quieto 40+ barras, comprimido al máximo en los últimos 10
+// ============================================================
+rango40 = (Highest[40](High) - Lowest[40](Low)) / (close + 0.001) * 100
+rango10 = (Highest[10](High) - Lowest[10](Low)) / (close + 0.001) * 100
+
+// Consolidación: rango 40 días estrecho Y últimos 10 días aún más comprimidos
+consolidado = rango40 < 35 AND rango10 < rango40 * 0.40
+
+// Precio no ha roto al alza todavía: seguimos dentro del rango
+noBroto = close < Highest[40](High) * 1.02
+
+// Ichimoku plano = confirma que no hay tendencia, solo rango
+tkFlat    = Abs(tenkan - tenkan[5]) / (close + 0.001) * 100 < 3
+kjFlat    = Abs(kijun  - kijun[5])  / (close + 0.001) * 100 < 3
+ichiPlano = tkFlat AND kjFlat
+diffTK    = Abs(tenkan - kijun) / (close + 0.001) * 100
+
+// ============================================================
+// PILAR 2 — VOLUMEN CLIMÁTICO DE ABSORCIÓN
+// Barra de alto volumen reciente dentro del rango con precio quieto
+// Wyckoff: institucionales absorben a los vendedores sin subir el precio
+// ============================================================
+
+// Volumen climático en alguna de las últimas 5 barras (>= 2x media)
+climHoy = volume   >= avgVol * 2
+clim1   = volume[1] >= avgVol * 2
+clim2   = volume[2] >= avgVol * 2
+clim3   = volume[3] >= avgVol * 2
+clim4   = volume[4] >= avgVol * 2
+volClimatico = climHoy OR clim1 OR clim2 OR clim3 OR clim4
+
+// Absorción alcista: en la barra de alto volumen el precio cerró
+// en la mitad superior del rango → compradores dominan a los vendedores
+absHoy = climHoy AND close   > (High   + Low)   / 2
+abs1   = clim1   AND close[1] > (High[1] + Low[1]) / 2
+abs2   = clim2   AND close[2] > (High[2] + Low[2]) / 2
+abs3   = clim3   AND close[3] > (High[3] + Low[3]) / 2
+abs4   = clim4   AND close[4] > (High[4] + Low[4]) / 2
+absorcionAlcista = absHoy OR abs1 OR abs2 OR abs3 OR abs4
+
+// Divergencia acumulativa: precio plano 10 días pero volumen medio sube
+volMedReciente = Average[5](volume)
+volMedPrevio   = Average[5](volume)[10]
+precioPlano    = Abs(close - close[10]) / (close + 0.001) * 100 < 8
+volAcumulando  = volMedReciente > volMedPrevio * 1.10
+divAcum        = precioPlano AND volAcumulando
+
+// Distancia al máximo de 40 días (cuánto le falta para romper)
+distTop = (Highest[40](High) - close) / (close + 0.001) * 100
+
+// ============================================================
+// PILAR 3 — VIGÍA10: COMPRESIÓN → GIRO ALCISTA
+// sv venía comprimido cerca de cero y empieza a girar al alza
+// Este es el "spring" del Wyckoff visto por el Vigía10
+// ============================================================
+svSube      = sv > sv[1] AND sv[1] > sv[2]
+svConFuerza = (sv - sv[1]) >= (sv[1] - sv[2])
+svComprimido = Abs(sv) < 15 AND Abs(sv[3]) < 15
+svDesdeAbajo = sv > sv[4] AND sv[4] <= 0    // venía de territorio negativo
+svCruzaPos   = sv > 0 AND sv[3] <= 0        // acaba de cruzar a positivo
+svSobreMR    = sv > mr
+filtroMejora = filtro > filtro[3] AND filtro > filtro[5]
+
+// ============================================================
+// HARD GATE FINAL
+// ============================================================
+baseOk = close >= 5 AND close <= 50 AND dolarVol >= 2000000 AND consolidado AND noBroto AND volClimatico AND svSube
+
+// ============================================================
+// SCORING — calidad de los tres pilares
+// Los hard gates no puntúan: score es genuino
+// ============================================================
+
+// ---- PILAR 1: Calidad de la consolidación ----
+s1 = (rango40 < 20) * 20                           // consolidación muy ajustada
+s2 = (rango40 >= 20 AND rango40 < 28) * 12         // consolidación buena
+s3 = (rango10 < rango40 * 0.25) * 15               // últimos 10 días extremadamente comprimidos
+s4 = ichiPlano * 12                                 // TK planos: Ichimoku confirma el rango
+s5 = (diffTK < 1) * 10                             // TK casi fusionados: Takana en rango
+
+// ---- PILAR 2: Calidad del volumen climático ----
+s6 = (Highest[3](volume) >= avgVol * 3) * 20       // volumen 3x: señal institucional fuerte
+s7 = (Highest[3](volume) >= avgVol * 2 AND Highest[3](volume) < avgVol * 3) * 12
+s8 = absorcionAlcista * 18                          // cierre alto en barra climática = absorción
+s9 = divAcum * 15                                   // precio plano + volumen acumulando
+
+// ---- PILAR 3: Calidad del giro Vigía10 ----
+s10 = svCruzaPos * 20                              // sv acaba de cruzar a positivo: señal máxima
+s11 = svDesdeAbajo * 12                            // sv viene de negativo: giro desde el fondo
+s12 = svSobreMR * 12                               // sv sobre mr: impulso comprador activo
+s13 = svConFuerza * 10                             // sv acelerando al alza
+s14 = (sv > 0) * 10                               // sv positivo: momentum confirmado
+s15 = svComprimido * 8                             // sv comprimido previo: energía acumulada
+s16 = filtroMejora * 8                             // filtro mejorando: tendencia de fondo gira
+
+// ---- POSICIÓN PRECIO / ICHIMOKU (contexto) ----
+s17 = (close >= kumoBot AND close <= kumoTop) * 15  // dentro del Kumo: zona de máxima tensión
+s18 = (close >= kumoTop * 0.97 AND close <= kumoTop * 1.03) * 12  // tocando techo del Kumo
+s19 = (close > kijun AND close <= kumoTop) * 10    // entre kijun y Kumo: listo para romper
+
+// ---- PROXIMIDAD AL TECHO DEL RANGO (fase avanzada del squeeze) ----
+s20 = (distTop < 3) * 15                           // en zona de ruptura: squeeze inminente
+s21 = (distTop >= 3 AND distTop < 8) * 8           // acercándose al techo del rango
+
+// ---- SCORE TOTAL ----
+score = s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14 + s15 + s16 + s17 + s18 + s19 + s20 + s21
+
+// ---- CONDICIÓN FINAL ----
+condicion = baseOk AND score >= 60
+
+SCREENER[score * condicion](score, rango40 AS "Rango40%", rango10 AS "Rango10%", distTop AS "DistTop%", sv, volRel AS "VolX", close)

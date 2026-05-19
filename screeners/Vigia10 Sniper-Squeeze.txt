@@ -1,0 +1,151 @@
+// ============================================================
+// SCREENER VIGIA10 SNIPER v5.3 — PRE-SQUEEZE EDITION
+// Penny Stocks | NYSE + Nasdaq | Largos | Diario
+// VERSION DIAGNÓSTICO — scoreMin bajo para calibrar
+// ============================================================
+
+// ---- PARÁMETROS ----
+minAvgVol    = 200000
+minPrice     = 0.10
+maxPrice     = 5
+minAtrPct    = 0.02
+scoreMin     = 50
+toleranciaTK = 0.008
+minVelasTK   = 2
+coilMax      = 0.12
+maxExtPct    = 0.15
+crossLB      = 5
+filtroLB     = 8
+
+// ---- DATOS BÁSICOS ----
+c = Close
+v = Volume
+avgVol = Average[20](v)
+cLiquidez = avgVol >= minAvgVol
+cPrecio = c >= minPrice AND c <= maxPrice
+atr14 = AverageTrueRange[14](Close)
+atrPct = atr14 / (c + 0.0001)
+atrOk = atrPct >= minAtrPct
+
+// ---- COMPRESIÓN PRECIO ----
+rangeHigh10 = Highest[10](High)[1]
+rangeLow10 = Lowest[10](Low)[1]
+coilPct10 = (rangeHigh10 - rangeLow10) / (c + 0.0001)
+coiledPrecio = coilPct10 <= coilMax
+rangeHigh60 = Highest[60](High)
+rangeLow60 = Lowest[60](Low)
+rango60pct = (rangeHigh60 - rangeLow60) / (c + 0.0001)
+comprimido = coilPct10 < rango60pct * 0.30
+minimo60 = Lowest[60](Low)
+distMin = (c - minimo60) / (c + 0.0001)
+cercaMin = distMin < 0.25
+
+// ---- DIVERGENCIA PRECIO-VOLUMEN ----
+precioHace10 = Close[10]
+tendPrecio = (c - precioHace10) / (precioHace10 + 0.0001)
+precioPlano = Abs(tendPrecio) < 0.08
+volHace10 = Average[5](Volume)[10]
+volReciente = Average[5](Volume)
+volSube = volReciente > volHace10 * 1.05
+divAcum = precioPlano AND volSube
+volX = v / (avgVol + 0.0001)
+motorOk = volX >= 1.0
+
+// ---- ABSORCIÓN ----
+atrHace10 = AverageTrueRange[14](Close)[10]
+atrRef = atrHace10 / (c + 0.0001)
+atrBaja = atrPct < atrRef * 0.90
+absorcion = atrBaja AND volSube
+
+// ---- ICHIMOKU / TAKANA ----
+tenkan = (Highest[9](High) + Lowest[9](Low)) / 2
+kijun = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa = (tenkan + kijun) / 2
+ssb = (Highest[52](High) + Lowest[52](Low)) / 2
+kumoTop = Max(ssa, ssb)
+kumoBottom = Min(ssa, ssb)
+
+hh9p1 = Highest[9](High)[1]
+ll9p1 = Lowest[9](Low)[1]
+hh26p1 = Highest[26](High)[1]
+ll26p1 = Lowest[26](Low)[1]
+tenkan1 = (hh9p1 + ll9p1) / 2
+kijun1 = (hh26p1 + ll26p1) / 2
+
+hh9p2 = Highest[9](High)[2]
+ll9p2 = Lowest[9](Low)[2]
+hh26p2 = Highest[26](High)[2]
+ll26p2 = Lowest[26](Low)[2]
+tenkan2 = (hh9p2 + ll9p2) / 2
+kijun2 = (hh26p2 + ll26p2) / 2
+
+hh9p3 = Highest[9](High)[3]
+ll9p3 = Lowest[9](Low)[3]
+hh26p3 = Highest[26](High)[3]
+ll26p3 = Lowest[26](Low)[3]
+tenkan3 = (hh9p3 + ll9p3) / 2
+kijun3 = (hh26p3 + ll26p3) / 2
+
+diffTK = Abs(tenkan - kijun) / (c + 0.0001)
+diffTK1 = Abs(tenkan1 - kijun1) / (c + 0.0001)
+diffTK2 = Abs(tenkan2 - kijun2) / (c + 0.0001)
+diffTK3 = Abs(tenkan3 - kijun3) / (c + 0.0001)
+cFusion = (diffTK <= toleranciaTK) + (diffTK1 <= toleranciaTK) + (diffTK2 <= toleranciaTK) + (diffTK3 <= toleranciaTK)
+takActiva = cFusion >= minVelasTK
+
+// Contexto permisivo: aceptamos precio bajo Kumo para pre-squeeze
+// kumoAlc solo como bonus, NO como filtro obligatorio
+kumoAlc = ssa > ssb
+pSobreKumo = c > kumoTop
+pEnKumo = c >= kumoBottom AND c <= kumoTop
+pKijun = c >= kijun * 0.93 AND c <= kijun * 1.10
+pBajoKumo = c < kumoBottom
+ctxOk = pSobreKumo OR pEnKumo OR pKijun OR pBajoKumo
+tkFlat = Abs(tenkan - tenkan[3]) / (c + 0.0001) < 0.020
+kjFlat = Abs(kijun - kijun[3]) / (c + 0.0001) < 0.018
+takLargo = takActiva AND ctxOk AND tkFlat AND kjFlat
+
+// ---- VIGÍA10 ----
+ignored, ignored, BS, BI, ignored, SV, MR, ignored = CALL "Blai5 VIGIA 10"
+filtro = ExponentialAverage[20](SV)
+
+anchActual = BS - BI
+anchMedia20 = Average[20](anchActual)
+anchMin10 = Lowest[10](anchActual)[1]
+ratioBandas = anchActual / (anchMedia20 + 0.0001)
+bandaMin = anchActual <= anchMin10 * 1.05
+bandaComp = ratioBandas < 0.80
+svDentro = SV > BI AND SV < BS
+svSube = SV > SV[1] AND SV > SV[2]
+sqVigia = bandaComp AND svDentro AND svSube
+svGira = SV > SV[2] AND SV > SV[3]
+svBajo = SV < 30
+preSV = svGira AND svBajo
+svUp = SV > SV[1] AND SV > SV[2]
+mrUp = MR > MR[1]
+pre0 = svUp AND mrUp AND SV < MR AND filtro > filtro[3]
+crossSVMR = SV CROSSES OVER MR
+bsN1 = barssince(crossSVMR)
+niv1 = bsN1 <= crossLB AND SV > 0
+dorada = niv1 AND filtro > 0
+filtroGira = filtro > filtro[3] AND filtro > filtro[5]
+crossFil = filtro CROSSES OVER 0
+bsFil = barssince(crossFil)
+filFresco = bsFil <= filtroLB
+ma20 = Average[20](Close)
+extMa = (c - ma20) / (c + 0.0001)
+notExt = extMa <= maxExtPct
+
+// ---- SCORE ----
+score = (comprimido * 20) + (cercaMin * 10) + (divAcum * 25) + (absorcion * 20) + (takLargo * 25) + (bandaMin * 15) + (sqVigia * 20) + (dorada * 20) + (niv1 * 10) + (pre0 * 8) + (preSV * 6) + (filtroGira * 8) + (filFresco * 8) + (coiledPrecio * 10) + (motorOk * 5) + (atrPct * 300) + (kumoAlc * 8) + (pSobreKumo * 10)
+
+// ---- PUERTAS RELAJADAS PARA DIAGNÓSTICO ----
+nucleo = (comprimido) + (divAcum) + (absorcion) + (takLargo) + (bandaMin) + (sqVigia)
+sigVigia = pre0 OR niv1 OR sqVigia OR preSV
+
+// Puerta principal: una señal núcleo + una señal Vigía
+// o dos señales núcleo solas
+unaSenal = nucleo > 0 AND (sigVigia OR takLargo)
+condicion = cLiquidez AND cPrecio AND atrOk AND notExt AND coiledPrecio AND unaSenal AND score >= scoreMin
+
+SCREENER[condicion](score AS "Score", Close AS "Precio", diffTK * 100 AS "FusionTK%", coilPct10 * 100 AS "Rango%", distMin * 100 AS "DistMin%", volX AS "VolX", filtro AS "Filtro", SV AS "SV")

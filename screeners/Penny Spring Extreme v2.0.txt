@@ -1,0 +1,206 @@
+// ============================================================
+// SCREENER: PENNY SPRING EXTREME v2.0
+// NYSE + Nasdaq | Largos | Diario | $0.10-$5
+// Filosofía: penny que ha completado una BASE DE ACUMULACIÓN larga
+// (rango comprimido 20-60 barras, suelo establecido, bajo la nube)
+// con PRESENCIA INSTITUCIONAL confirmada por Koncorde (azul positivo
+// o divergencia alcista durante el rango) y SV remontando desde lo
+// profundo → Wyckoff Phase C spring inminente.
+// ============================================================
+// DIFERENCIA CLAVE VS v1.x:
+//   v1.x detectaba: pausa + volumen = posible spring
+//   v2.0 detecta:   base construida + institucionales dentro + giro
+//   La pausa sin institucionales es distribución → sigue bajando.
+//   Koncorde (azul) es el diferenciador: sin él el setup es ruido.
+// ============================================================
+// Pocas señales: bajar scoreMin a 50, o climVol a 2x, o rango40 a 90
+// Muchas señales: subir scoreMin a 90, o rango40 a 60, o añadir sueloHecho al gate
+// ============================================================
+// CAMBIOS VS v1.1:
+//   [FIX] Filosofía: de "pausa + spike" → "base + institucionales + spring"
+//   [FIX] consolidado en gate: distingue acumulación de caída libre
+//   [FIX] sueloHecho en gate: el suelo debe estar hecho antes del spring
+//   [FIX] absorcionAlcista separada de absorcionQuieta — direcciones opuestas
+//   [NUEVO BLOQUE 3] Spring signal: confirmación de inicio del movimiento
+//   [NUEVO BLOQUE 5] Koncorde — el diferenciador institucional (gate + scoring)
+// ============================================================
+
+// ---- PARAMETROS ----
+minVolDolar = 300000
+minPrice    = 0.10
+maxPrice    = 5
+m           = 3
+
+// ---- VIGIA10 ----
+ignored, ignored, ignored, ignored, ignored, filtro, sv, mr = CALL "Blai5 VIGIA 10"
+svSube     = sv > sv[1] AND sv[1] > sv[2]
+svDesdePozo = sv[5] < -30 AND sv > sv[5]
+svRemonta  = sv > sv[3] AND sv > sv[5]
+svCruzaPos = sv > 0 AND sv[3] <= 0
+svSobreMR  = sv > mr
+filtroGira = filtro > filtro[3] AND filtro > filtro[5]
+svRecLow   = Lowest[5](sv)
+svJump     = sv - svRecLow
+
+// ---- KONCORDE ----
+// NVI: sube en días de poco volumen = días institucionales
+// azul positivo o girando durante la base = acumulación silenciosa real
+nvi    = NegativeVolumeIndex(close)
+nvim   = ExponentialAverage[m](nvi)
+nvimax = Highest[90](nvim)
+nvimin = Lowest[90](nvim)
+azul   = (nvi - nvim) * 100 / Max(nvimax - nvimin, 0.001)
+azulPos       = azul > 0
+azulGirando   = azul > azul[2]
+azulEnSoporte = azul[2] > 0 OR azul[3] > 0 OR azul[4] > 0 OR azul[5] > 0 OR azul[6] > 0 OR azul[7] > 0 OR azul[8] > 0
+divergenciaAlc = azul > azul[3] AND close < close[3]
+koncordeOk    = azulPos OR azulGirando OR azulEnSoporte
+
+// ---- ICHIMOKU ----
+tenkan  = (Highest[9](High)  + Lowest[9](Low))  / 2
+kijun   = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa0    = (tenkan + kijun) / 2
+ssb0    = (Highest[52](High) + Lowest[52](Low)) / 2
+kumoBot = Min(ssa0, ssb0)
+
+// ---- LIQUIDEZ Y PRECIO ----
+avgVol   = Average[20](volume)
+dolarVol = close * avgVol
+volRel   = volume / avgVol
+cPrecio  = close >= minPrice AND close <= maxPrice
+cVolumen = dolarVol >= minVolDolar
+
+// ============================================================
+// PILAR 1 — BASE DE ACUMULACIÓN CONSTRUIDA
+// El stock dejó de caer y lleva tiempo en rango → Wyckoff Phase B
+// ============================================================
+
+// Rango de consolidación (pennies necesitan rangos más amplios que mid-caps)
+rango40 = (Highest[40](High) - Lowest[40](Low)) / (close + 0.001) * 100
+rango10 = (Highest[10](High) - Lowest[10](Low)) / (close + 0.001) * 100
+
+// Base construida: stock en rango, no en caída libre
+// rango40 < 80: pennies pueden tener rangos amplios — solo filtramos caídas libres (80%+)
+// rango10 < rango40 * 0.70: los últimos 10 días más comprimidos que la base general
+consolidado = rango40 < 80 AND rango10 < rango40 * 0.70
+
+// El suelo está hecho: el precio aguanta cerca del mínimo del rango
+// Permite un spring breve (dip hasta 6% bajo el mínimo reciente es normal)
+minimo30 = Lowest[30](Low)
+sueloHecho = close >= minimo30 * 0.94
+
+// Para scoring y output
+minimo60  = Lowest[60](Low)
+distMin60 = (close - minimo60) / (close + 0.001) * 100
+castigado = close < Highest[60](High) * 0.60
+
+// Bajo la nube: estructura bajista previa, stock castigado por Ichimoku
+bajaNube = close < kumoBot
+
+// ============================================================
+// PILAR 2 — ABSORCIÓN INSTITUCIONAL
+// Volumen climático con dos variantes: alcista (compradores dominan)
+// o quieta (precio no reacciona = absorción silenciosa pura)
+// ============================================================
+
+// Barras con volumen climático (>= 3x media) en últimas 5 barras
+clim0 = volume    >= avgVol * 3
+clim1 = volume[1] >= avgVol * 3
+clim2 = volume[2] >= avgVol * 3
+clim3 = volume[3] >= avgVol * 3
+clim4 = volume[4] >= avgVol * 3
+climVol = clim0 OR clim1 OR clim2 OR clim3 OR clim4
+
+// Absorción alcista: barra climática con cierre en mitad superior
+// Compradores dominaron la sesión de alto volumen → señal directional clara
+absV0 = clim0 AND close    > (High   + Low)   / 2
+absV1 = clim1 AND close[1] > (High[1] + Low[1]) / 2
+absV2 = clim2 AND close[2] > (High[2] + Low[2]) / 2
+absV3 = clim3 AND close[3] > (High[3] + Low[3]) / 2
+absV4 = clim4 AND close[4] > (High[4] + Low[4]) / 2
+absorcionAlcista = absV0 OR absV1 OR absV2 OR absV3 OR absV4
+
+// Absorción quieta: volumen alto pero rango estrecho
+// Institucional absorbe la oferta sin levantar el precio (Wyckoff puro)
+rBar0 = (High   - Low)   / (close + 0.001) * 100
+rBar1 = (High[1] - Low[1]) / (close + 0.001) * 100
+rBar2 = (High[2] - Low[2]) / (close + 0.001) * 100
+rBar3 = (High[3] - Low[3]) / (close + 0.001) * 100
+rBar4 = (High[4] - Low[4]) / (close + 0.001) * 100
+absQ0 = clim0 AND rBar0 < 8
+absQ1 = clim1 AND rBar1 < 8
+absQ2 = clim2 AND rBar2 < 8
+absQ3 = clim3 AND rBar3 < 8
+absQ4 = clim4 AND rBar4 < 8
+absorcionQuieta = absQ0 OR absQ1 OR absQ2 OR absQ3 OR absQ4
+
+// Divergencia acumulativa: precio plano 10 días + volumen medio sube
+volMedReciente = Average[5](volume)
+volMedPrevio   = Average[5](volume)[10]
+precioPlano    = Abs(close - close[10]) / (close + 0.001) * 100 < 15
+volAcumulando  = volMedReciente > volMedPrevio * 1.20
+divAcum        = precioPlano AND volAcumulando
+
+// Para output y scoring
+spikeX = Highest[5](volume) / (avgVol + 0.001)
+
+// ============================================================
+// HARD GATE — los 4 pilares deben estar presentes
+// ============================================================
+baseOk = cPrecio AND cVolumen AND bajaNube AND consolidado AND climVol AND (svSube OR svJump >= 20) AND koncordeOk
+
+// ============================================================
+// SCORING — discrimina calidad entre setups que pasan el gate
+// Koncorde domina el ranking: sin institucionales el setup es frágil
+// ============================================================
+
+// ---- BLOQUE 1: CALIDAD DE LA BASE (consolidación) ----
+s1 = (rango40 < 25) * 25                                      // base muy ajustada: energía máxima acumulada
+s2 = (rango40 >= 25 AND rango40 < 45) * 15                   // base buena
+s3 = (rango10 < rango40 * 0.30) * 20                         // últimos 10 días ultra-comprimidos: spring inminente
+s4 = (rango10 >= rango40 * 0.30 AND rango10 < rango40 * 0.55) * 10
+s5 = sueloHecho * 12                                          // suelo establecido: compradores aguantan
+s6 = castigado * 10                                           // hundido desde máximos: potencial de rebote violento
+s7 = (distMin60 < 10) * 15                                    // en mínimos históricos: máximo potencial
+s8 = (distMin60 >= 10 AND distMin60 < 25) * 8
+
+// ---- BLOQUE 2: CALIDAD DE LA ABSORCIÓN ----
+s9  = absorcionAlcista * 25                                   // compradores dominaron en barra climática
+s10 = absorcionQuieta * 20                                    // vol alto + precio quieto: absorción institucional pura
+s11 = divAcum * 15                                            // divergencia vol/precio acumulativa
+s12 = (spikeX >= 5) * 15                                      // spike muy potente (5x+): climax de vendedores
+s13 = (spikeX >= 3 AND spikeX < 5) * 8
+
+// ---- BLOQUE 3: SPRING SIGNAL — inicio del movimiento ----
+s14 = (close > close[1] AND close > open) * 12               // vela alcista hoy: spring arrancando
+s15 = (close > close[1] AND close[1] > close[2]) * 10        // 2 velas alcistas consecutivas
+s16 = (close >= Highest[10](High) * 0.97) * 15               // tocando máximo de 10 días: ruptura inminente
+
+// ---- BLOQUE 4: VIGIA10 — CALIDAD DEL GIRO ----
+s17 = svDesdePozo * 20                                        // sv desde el pozo: giro del peor momento
+s18 = svRemonta * 15                                          // sv remontando en ventana de 5 días
+s19 = svCruzaPos * 25                                         // sv cruza a positivo: señal máxima Vigia10
+s20 = svSobreMR * 12                                          // sv sobre mr: momentum comprador activo
+s21 = (svJump >= 40) * 20                                     // salto masivo desde mínimo: compra institucional súbita
+s22 = (svJump >= 20 AND svJump < 40) * 10
+s23 = filtroGira * 10                                         // filtro girando: fondo de mercado mejora
+s24 = (sv > 0) * 8                                            // sv positivo: momentum confirmado
+
+// ---- BLOQUE 5: KONCORDE — EL DIFERENCIADOR INSTITUCIONAL ----
+// Sin presencia institucional el setup es distribución disfrazada
+s25 = azulPos * 25                                            // manos fuertes activas ahora mismo
+s26 = azulGirando * 20                                        // institucionales acelerando su posición
+s27 = azulEnSoporte * 25                                      // compraban en silencio durante toda la base
+s28 = divergenciaAlc * 40                                     // señal premium: precio baja pero institucionales compran más
+s29 = (azul > 10) * 15                                        // institucionales claramente alcistas
+
+// ---- BLOQUE 6: CONTEXTO ICHIMOKU (targets del spring) ----
+s30 = (close >= kumoBot * 0.90 AND close < kumoBot) * 15     // rozando la nube: pull hacia arriba inmediato
+s31 = (kijun > close AND kijun < kumoBot * 1.10) * 10        // kijun es primer target alcanzable tras el spring
+
+score = s1+s2+s3+s4+s5+s6+s7+s8+s9+s10+s11+s12+s13+s14+s15+s16+s17+s18+s19+s20+s21+s22+s23+s24+s25+s26+s27+s28+s29+s30+s31
+
+// ---- CONDICION FINAL ----
+condicion = baseOk AND score >= 70
+
+SCREENER[score * condicion](score, rango40 AS "Rango40%", rango10 AS "Rango10%", azul AS "Azul", divergenciaAlc AS "DivAlc", sv, spikeX AS "SpikeX", close, volRel)

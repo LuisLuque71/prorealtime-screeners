@@ -1,0 +1,105 @@
+// ============================================================
+// SCREENER: TAKANA EN KUMO v6.0
+// NYSE + Nasdaq | Solo largos (Kumo alcista) | Diario
+// Filosofía: Tenkan y Kijun fusionados dentro del Kumo alcista
+// con sv del Vigía girando al alza → ruptura inminente hacia arriba.
+// Ajuste si pocas señales: baja scoreMin a 30 o tolerancia a 0.010
+// ============================================================
+
+// ---- VIGÍA10 ----
+ignored, ignored, ignored, ignored, ignored, ignored, sv, mr = CALL "Blai5 VIGIA 10"
+filtro = ExponentialAverage[50](sv)
+astro  = sv - mr
+
+// ---- ICHIMOKU ----
+tenkan  = (Highest[9](High)  + Lowest[9](Low))  / 2
+kijun   = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa     = (tenkan + kijun) / 2
+ssb     = (Highest[52](High) + Lowest[52](Low)) / 2
+kumoTop = Max(ssa, ssb)
+kumoBot = Min(ssa, ssb)
+
+// ---- FUSIÓN TAKANA ----
+tolerancia = 0.007
+diffTK0 = Abs(tenkan    - kijun)    / (close + 0.001)
+diffTK1 = Abs(tenkan[1] - kijun[1]) / (close + 0.001)
+diffTK2 = Abs(tenkan[2] - kijun[2]) / (close + 0.001)
+diffTK3 = Abs(tenkan[3] - kijun[3]) / (close + 0.001)
+
+countTK    = (diffTK0 < tolerancia) + (diffTK1 < tolerancia) + (diffTK2 < tolerancia) + (diffTK3 < tolerancia)
+takanaOk   = countTK >= 2
+takanaReal = diffTK0 > 0.0002 AND diffTK0 < tolerancia
+
+// ---- TAKANA ASCENDENTE ----
+tkMid          = (tenkan + kijun) / 2
+takanaAscSuave = tkMid > tkMid[2]
+
+// ---- PRECIO DENTRO DEL KUMO ----
+// bajoSSB eliminado: la Takana válida se forma dentro del Kumo, no debajo
+enKumo   = close >= kumoBot AND close <= kumoTop
+kumoGros = (kumoTop - kumoBot) / (close + 0.001) * 100
+kumoReal = kumoGros > 1.5
+kumoFina = kumoGros < 15
+
+// ---- KUMO ALCISTA (scoring, no gate) ----
+// Mejor setup si nube ya alcista, pero no se descarta transición
+kumoAlcista = ssa > ssb
+
+// ---- VIGÍA10 GATES ----
+svSube   = sv > sv[1] AND sv[1] > sv[2]
+svNoLate = sv < 40
+svNoDeep = sv > -35
+
+// ---- COMPRESIÓN PREVIA ----
+amplitudReciente = highest[5](sv) - lowest[5](sv)
+amplitudPrevia   = highest[15](sv[5]) - lowest[15](sv[5])
+postSqueeze = amplitudPrevia <= 15 AND amplitudReciente >= amplitudPrevia * 1.2
+
+// ---- ACELERACIÓN Y DIVERGENCIA ----
+svConFuerza = (sv - sv[1]) >= (sv[1] - sv[2])
+filtroDiv   = filtro < 0 AND (filtro - filtro[3]) > (sv - sv[3]) AND filtro > filtro[3]
+
+// ---- LIQUIDEZ (dollar volume, no volumen en acciones) ----
+avgVol20 = average[20](volume)
+dolarVol = close * avgVol20
+
+// ---- HARD GATE FINAL ----
+cSube = close > close[1]
+baseOk = close >= 1 AND close <= 500 AND dolarVol >= 500000 AND cSube AND enKumo AND kumoFina AND kumoReal AND takanaOk AND takanaReal AND takanaAscSuave AND svSube AND svNoLate AND svNoDeep
+
+// ============================================================
+// SCORING — factores discriminantes únicamente
+// Los hard gates NO puntúan: el score es genuino, no garantizado
+// ============================================================
+
+// ---- VIGÍA10 — calidad del giro ----
+s1 = (sv > 0) * 15                          // sv positivo: impulso confirmado
+s2 = (sv > mr) * 10                         // sv sobre mr: momentum activo
+s3 = svConFuerza * 12                       // sv acelera: el giro gana fuerza
+s4 = (astro > 0 AND astro[3] <= 0) * 15    // astro acaba de cruzar a positivo
+s5 = (filtro > filtro[3]) * 8              // filtro mejorando: fondo apoya
+s6 = (mr > 0) * 10                         // mr positivo: presión compradora
+s7 = filtroDiv * 12                         // divergencia filtro/sv: giro temprano
+
+// ---- KUMO — calidad de la zona de compresión ----
+s8  = kumoAlcista * 20                      // nube alcista: breakout hacia zona libre
+s9  = (kumoGros < 8) * 10                  // nube muy fina: mínima resistencia al romper
+s9b = (ssa > ssa[3]) * 8                   // SSA mejorando: nube más alcista que hace 3 días
+
+// ---- VOLUMEN — confirmación del breakout ----
+volRel = volume / avgVol20
+s10 = (volRel >= 1.5) * 15                 // volumen alto: interés real detrás
+s11 = (volRel >= 1.2 AND volRel < 1.5) * 8
+
+// ---- PRICE ACTION ----
+s12 = (close > open) * 8                   // vela alcista hoy
+s13 = (close > highest[10](close[1])) * 15 // ruptura de máximo de 10 días
+s14 = postSqueeze * 15                     // compresión sv previa: energía acumulada
+
+// ---- SCORE TOTAL ----
+score = s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s9b + s10 + s11 + s12 + s13 + s14
+
+// ---- CONDICIÓN FINAL ----
+condicion = baseOk AND score >= 50
+
+SCREENER[score * condicion](score, diffTK0 * 100, kumoGros, filtro)

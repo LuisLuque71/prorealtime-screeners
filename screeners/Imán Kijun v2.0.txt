@@ -1,0 +1,137 @@
+// ============================================================
+// SCREENER: Imán Kijun v2.0
+// NYSE/NASDAQ - Daily
+// Filosofía: precio alejado de kijun plana → reversión a la media.
+// Todo suma, nada bloquea. Los mejores setups flotan arriba.
+// Ajuste si salen pocas señales: sube cKijunFlat a 10 o baja scoreMin a 55
+// ============================================================
+
+// --- HARD GATES (precio y liquidez mínima) ---
+dolarVol  = close * average[20](volume)
+cPrecio   = close >= 0.50 AND close <= 25
+cVolumen  = dolarVol >= 500000
+
+// --- ICHIMOKU ---
+tenkan = (Highest[9](High)  + Lowest[9](Low))  / 2
+kijun  = (Highest[26](High) + Lowest[26](Low)) / 2
+
+// Kumo: valores sin desplazar (para comparar con precio actual)
+ssa0 = (tenkan + kijun) / 2
+ssb0 = (Highest[52](High) + Lowest[52](Low)) / 2
+ssa  = ssa0[26]
+ssb  = ssb0[26]
+nubeTop    = Max(ssa, ssb)
+nubeBot    = Min(ssa, ssb)
+nubeGrosor = (nubeTop - nubeBot) / (nubeBot + 0.0001) * 100
+
+// --- KIJUN PLANA (soporte estacionario = target fiable) ---
+// Ventana 10 barras: captura si el kijun está AHORA quieto, no si estuvo
+// quieto en el pasado. 26 barras capturaría step-changes históricos y
+// bloquearía casi todo en mercados con volatilidad reciente.
+kijunHigh10 = Highest[10](kijun)
+kijunLow10  = Lowest[10](kijun)
+kijunRango  = (kijunHigh10 - kijunLow10) / (kijun + 0.0001) * 100
+cKijunFlat  = kijunRango < 8
+
+// --- DISTANCIA AL KIJUN ---
+distKijun = (kijun - close) / (kijun + 0.0001) * 100
+cBajo     = close < kijun
+cDist     = distKijun >= 15 AND distKijun <= 40
+
+// --- VIGÍA10 ---
+ignored, ignored, ignored, ignored, ignored, filtro, sv, mr = CALL "Blai5 VIGIA 10"
+
+// --- SV GIRANDO (agotamiento bajista) ---
+// Hard gate: solo 1 barra para no perder el primer día del giro
+// El 2º día consecutivo sube pasa a scoring (s9)
+svSubiendo  = sv > sv[1]
+svSubiendo2 = sv > sv[1] AND sv[1] > sv[2]
+cSvGirando  = svSubiendo
+
+// Precio convergiendo hoy: distancia al kijun menor que ayer
+// Sin esto aparecen stocks que siguen cayendo aunque todo lo demás cuadre
+cReversionActiva = distKijun < distKijun[1]
+
+// --- HARD GATE FINAL ---
+baseOk = cPrecio AND cVolumen AND cBajo AND cDist AND cKijunFlat AND cSvGirando AND cReversionActiva
+
+// ============================================================
+// SCORING — todo suma, nada bloquea
+// ============================================================
+
+// --- CALIDAD DE LA KIJUN (cuanto más plana, más fiable el imán) ---
+// Umbrales ajustados a ventana de 10 barras
+s1 = (kijunRango < 2) * 20
+s2 = (kijunRango >= 2 AND kijunRango < 4) * 12
+s3 = (kijunRango >= 4 AND kijunRango < 8) * 5
+
+// --- ZONA DE DISTANCIA (potencial de recorrido) ---
+// 15-20%: mínimo válido; 20-30%: zona óptima; 30-40%: muy extendido
+s4 = (distKijun >= 15 AND distKijun < 20) * 10
+s5 = (distKijun >= 20 AND distKijun < 30) * 20
+s6 = (distKijun >= 30 AND distKijun <= 40) * 15
+
+// --- REVERSIÓN YA INICIADA (factor más crítico) ---
+// La distancia se acorta: el precio ya converge hacia el kijun
+s7 = (distKijun < distKijun[1]) * 20
+s8 = (distKijun < distKijun[3]) * 15
+
+// --- VIGÍA10 — calidad del giro de sv ---
+// 2 barras consecutivas (giro confirmado, no solo ruido de 1 día)
+s9  = svSubiendo2 * 15
+// sv por encima de mr: impulso confirmado
+s10 = (sv > mr) * 10
+// sv cruzó a positivo: señal de giro máxima
+s11 = (sv > 0) * 12
+// filtro mejorando en los últimos 3 días
+s12 = (filtro > filtro[3]) * 10
+// filtro no demasiado hundido: reversión alcanzable pronto
+s13 = (filtro > -20) * 8
+
+// --- POSICIÓN TENKAN ---
+// Precio bajo tenkan y tenkan bajo kijun: recorrido libre, sin resistencia media
+s14 = (close < tenkan AND tenkan < kijun) * 10
+// Tenkan girando al alza: la media corta ya apoya el rebote
+s15 = (tenkan > tenkan[3]) * 8
+
+// --- VOLUMEN RELATIVO ---
+volRel = volume / average[20](volume)
+s16 = (volRel >= 1.5) * 15
+s17 = (volRel >= 1.2 AND volRel < 1.5) * 8
+
+// --- PRICE ACTION ---
+// Vela alcista: el día confirma el giro
+s18 = (close > open) * 10
+// Precio subiendo respecto a ayer
+s19 = (close > close[1]) * 8
+
+// ============================================================
+// SCORING KUMO — camino entre el precio y el kijun
+// ============================================================
+// El kijun es el objetivo. Si la nube se interpone entre precio y kijun,
+// hay resistencia que ralentiza o detiene el rebote.
+// Mejor caso: precio ya por encima de la nube → camino libre.
+
+// Precio sobre la nube: sin obstáculo entre precio y kijun
+s20 = (close > nubeTop) * 25
+
+// Precio dentro de la nube: ya cruzando la resistencia
+s21 = (close >= nubeBot AND close <= nubeTop) * 10
+
+// Precio bajo la nube pero nube delgada (< 5%): obstáculo menor
+s22 = (close < nubeBot AND nubeGrosor < 5) * 12
+
+// Precio bajo la nube, grosor medio (5-15%): cierta resistencia
+s23 = (close < nubeBot AND nubeGrosor >= 5 AND nubeGrosor < 15) * 5
+
+// Nube futura alcista: la estructura de las próximas 26 sesiones es alcista
+s24 = (ssa0 > ssb0) * 8
+
+// --- SCORE TOTAL ---
+score = s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14 + s15 + s16 + s17 + s18 + s19 + s20 + s21 + s22 + s23 + s24
+
+// --- CONDICIÓN FINAL ---
+// Umbral 70: con cReversionActiva como hard gate los resultados son más limpios
+condicion = baseOk AND score >= 70
+
+SCREENER[score * condicion](score, distKijun AS "Dist%", sv, mr, filtro, close, volRel)

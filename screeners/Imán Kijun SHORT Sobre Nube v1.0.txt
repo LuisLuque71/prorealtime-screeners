@@ -1,0 +1,200 @@
+// ============================================================
+// SCREENER: Imán Kijun SHORT Sobre Nube v1.0
+// NYSE/NASDAQ - Daily
+// Filosofía: stock en uptrend (sobre la nube) con subida parabólica
+// que lo aleja en exceso del kijun → corrección al kijun.
+// El kijun debe estar SOBRE la nube para que el camino sea libre.
+// ============================================================
+// AVISO: Corrección dentro de uptrend — probabilidad menor que el
+// SHORT bajo la nube. Usar para PUT options de 4-8 semanas.
+// Ajuste si pocas señales: baja cDist a 20, baja scoreMin a 70 o dolarVol a 3M
+// ============================================================
+
+// --- HARD GATES (precio y liquidez) ---
+dolarVol  = close * average[20](volume)
+cPrecio   = close >= 5 AND close <= 200
+cVolumen  = dolarVol >= 5000000
+
+// --- ICHIMOKU ---
+tenkan = (Highest[9](High)  + Lowest[9](Low))  / 2
+kijun  = (Highest[26](High) + Lowest[26](Low)) / 2
+
+// Kumo actual (desplazado 26 barras)
+ssa0 = (tenkan + kijun) / 2
+ssb0 = (Highest[52](High) + Lowest[52](Low)) / 2
+ssa  = ssa0[26]
+ssb  = ssb0[26]
+
+nubeTop    = Max(ssa, ssb)
+nubeBot    = Min(ssa, ssb)
+
+// Niveles históricos de nubeTop (confirmar que el precio lleva tiempo sobre la nube)
+nubeTop5  = Max(ssa[5],  ssb[5])
+nubeTop10 = Max(ssa[10], ssb[10])
+nubeTop20 = Max(ssa[20], ssb[20])
+
+// --- ESTRUCTURA: PRECIO SOBRE LA NUBE ---
+// Confirma uptrend. La nube actúa como soporte debajo, no como resistencia.
+cSobreNube = close > nubeTop
+
+// --- KIJUN: TARGET DE CORRECCIÓN ---
+// Crítico: el kijun debe estar SOBRE la nube (o en su techo).
+// Si el kijun está dentro o bajo la nube, la nube frenaría la corrección
+// antes de llegar al objetivo → setup poco fiable.
+kijunLibre = kijun > nubeBot   // mínimo: kijun no enterrado bajo la nube
+
+distAbove = (close - kijun) / (kijun + 0.0001) * 100
+cDist     = distAbove >= 25 AND distAbove <= 70
+
+// --- KIJUN PLANO (target estable) ---
+kijunHigh10 = Highest[10](kijun)
+kijunLow10  = Lowest[10](kijun)
+kijunRango  = (kijunHigh10 - kijunLow10) / (kijun + 0.0001) * 100
+
+// --- SUBIDA PARABÓLICA PREVIA ---
+// Mide cuánto subió el stock en su pico reciente vs hace 30 barras (base)
+maxReciente   = Highest[20](High)
+subidaDesde   = (maxReciente - close[30]) / (close[30] + 0.0001) * 100
+
+// --- STOCK FRENADO: ya no hace nuevos máximos ---
+// El pico quedó atrás; la subida ha perdido momentum
+cFrenada = Highest[5](High) < Highest[15](High) * 0.98
+
+// --- VOLUMEN DECRECIENTE EN LA CIMA (distribución) ---
+// Las subidas parabólicas terminan con volumen agotado
+volMedia5  = average[5](volume)
+volMedia20 = average[20](volume)
+
+// --- VIGÍA10 ---
+ignored, ignored, ignored, ignored, ignored, filtro, sv, mr = CALL "Blai5 VIGIA 10"
+
+// --- SV GIRANDO A LA BAJA ---
+svBajando  = sv < sv[1]
+svBajando2 = sv < sv[1] AND sv[1] < sv[2]
+
+// --- CONVERGENCIA ACTIVA HOY ---
+// La distancia al kijun se acorta: corrección ya en marcha
+cReversionActiva = distAbove < distAbove[1]
+
+// --- HARD GATE FINAL ---
+cCayendo  = close < close[1]
+baseOk = cPrecio AND cVolumen AND cSobreNube AND kijunLibre AND cDist AND cFrenada AND svBajando AND cReversionActiva AND cCayendo
+
+// ============================================================
+// SCORING — todo suma, nada bloquea
+// ============================================================
+
+// ============================================================
+// BLOQUE 1: POSICIÓN DEL KIJUN (calidad del camino al objetivo)
+// El setup más limpio: kijun sobre la nube → corrección sin obstáculos
+// ============================================================
+
+// Kijun por encima del techo de la nube: camino libre hasta el objetivo
+s1 = (kijun > nubeTop) * 25
+// Kijun dentro de la nube: camino parcialmente libre
+s2 = (kijun >= nubeBot AND kijun <= nubeTop) * 10
+// Margen entre kijun y nubeTop: cuanto más sobre la nube está el kijun,
+// más sólido es el nivel de soporte bajo el objetivo
+s3 = (kijun > nubeTop * 1.05) * 10   // kijun al menos 5% sobre nubeTop
+
+// ============================================================
+// BLOQUE 2: INTENSIDAD DE LA SUBIDA PARABÓLICA
+// Cuanto más explosiva fue la subida, más potente la corrección esperada
+// ============================================================
+
+s4 = (subidaDesde > 80) * 20     // subió más del doble desde la base
+s5 = (subidaDesde > 50 AND subidaDesde <= 80) * 14
+s6 = (subidaDesde > 30 AND subidaDesde <= 50) * 8
+
+// ============================================================
+// BLOQUE 3: STALL — CONFIRMACIÓN DEL TECHO
+// ============================================================
+
+// Pico claramente atrás (más de 1 semana sin nuevos máximos)
+s7 = (Highest[5](High) < Highest[20](High) * 0.95) * 15
+// Pico hace 3-5 días
+s8 = (Highest[3](High) < Highest[15](High) * 0.97) * 8
+// Precio bajo la tenkan: la media corta ya confirma el techo
+s9 = (close < tenkan) * 10
+
+// ============================================================
+// BLOQUE 4: DISTANCIA AL KIJUN (potencial de recorrido)
+// ============================================================
+
+s10 = (distAbove >= 25 AND distAbove < 35) * 10   // zona mínima
+s11 = (distAbove >= 35 AND distAbove < 50) * 20   // zona óptima
+s12 = (distAbove >= 50 AND distAbove <= 70) * 16  // zona extendida
+
+// Convergencia sostenida 3 barras: corrección con dirección confirmada
+s13 = (distAbove < distAbove[3]) * 15
+
+// ============================================================
+// BLOQUE 5: VOLUMEN DECRECIENTE EN EL TECHO (distribución)
+// Señal clásica de fin de movimiento parabólico
+// ============================================================
+
+// Volumen medio de los últimos 5 días inferior a la media de 20
+s14 = (volMedia5 < volMedia20 * 0.8) * 15   // agotamiento claro
+s15 = (volMedia5 < volMedia20 * 0.9) * 8    // agotamiento moderado
+// Hoy específicamente: volumen bajo + vela bajista = distribución
+volRel = volume / volMedia20
+s16 = (volRel < 0.7 AND close < open) * 10
+
+// ============================================================
+// BLOQUE 6: VIGÍA10 — GIRO BAJISTA
+// ============================================================
+
+s17 = svBajando2 * 15
+s18 = (sv < mr) * 10
+s19 = (sv < 0) * 12
+s20 = (filtro < filtro[3]) * 10
+// Filtro cayendo desde nivel alto: más potente que caer desde negativo
+s21 = (filtro > 20 AND filtro < filtro[5]) * 10
+
+// ============================================================
+// BLOQUE 7: KIJUN — CALIDAD DEL TARGET
+// ============================================================
+
+s22 = (kijunRango < 3) * 20    // kijun muy plano: target fijo
+s23 = (kijunRango >= 3 AND kijunRango < 6) * 12
+s24 = (kijunRango >= 6 AND kijunRango < 10) * 5
+
+// ============================================================
+// BLOQUE 8: ESTRUCTURA DE LA NUBE (debilidad del uptrend)
+// Una nube roja bajo el precio indica que el uptrend se debilita
+// ============================================================
+
+// Nube actual bajista (aunque el precio está sobre ella)
+s25 = (ssa < ssb) * 12
+// Nube futura bajista: la estructura se deteriora
+s26 = (ssa0 < ssb0) * 10
+
+// ============================================================
+// BLOQUE 9: PRICE ACTION
+// ============================================================
+
+s27 = (close < open) * 10
+s28 = (close < close[1]) * 8
+// Volumen alto en vela bajista: venta con convicción
+s29 = (volRel >= 1.5 AND close < open) * 12
+s30 = (tenkan < tenkan[3]) * 8
+
+// ============================================================
+// BLOQUE 10: HISTORIAL SOBRE LA NUBE (confirma que es uptrend real)
+// El stock lleva tiempo sobre la nube, no es un falso breakout reciente
+// ============================================================
+
+s31 = (close[5]  > nubeTop5)  * 8
+s32 = (close[10] > nubeTop10) * 10
+s33 = (close[20] > nubeTop20) * 12
+
+// --- SCORE TOTAL ---
+score = s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14 + s15 + s16 + s17 + s18 + s19 + s20 + s21 + s22 + s23 + s24 + s25 + s26 + s27 + s28 + s29 + s30 + s31 + s32 + s33
+
+// --- CONDICIÓN FINAL ---
+condicion = baseOk AND score >= 100
+
+// Ranking: score * distAbove — la distancia al kijun domina el orden
+// Ejemplo: score=130 distAbove=55 → orden=7150
+//          score=160 distAbove=26 → orden=4160
+SCREENER[score * distAbove * condicion](score, distAbove AS "Dist%", sv, mr, filtro, close, volRel)

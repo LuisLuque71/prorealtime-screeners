@@ -1,0 +1,61 @@
+// ============================================================
+// KONCORDE PRIMAVERA + ICHIMOKU v1.0
+// Patron Primavera (Verde>0 + Azul>0) con precio sobre nube
+// Tenkan>Kijun + Filtro Vigia10 positivo y subiendo
+// Timeframe: DIARIO
+// ============================================================
+
+m = 3
+
+// ---- KONCORDE ----
+pvi = PositiveVolumeIndex(close)
+pvim = ExponentialAverage[m](pvi)
+pvimax = Highest[90](pvim)
+pvimin = Lowest[90](pvim)
+oscp = (pvi - pvim) * 100 / Max(pvimax - pvimin, 0.001)
+
+nvi = NegativeVolumeIndex(close)
+nvim = ExponentialAverage[m](nvi)
+nvimax = Highest[90](nvim)
+nvimin = Lowest[90](nvim)
+azul = (nvi - nvim) * 100 / Max(nvimax - nvimin, 0.001)
+
+xmf = MoneyFlowIndex[14]
+OB1 = (BollingerUp[25](TotalPrice) + BollingerDown[25](TotalPrice)) / 2
+OB2 = Max(BollingerUp[25](TotalPrice) - BollingerDown[25](TotalPrice), 0.001)
+BollOsc = ((TotalPrice - OB1) / OB2) * 100
+xrsi = RSI[14](TotalPrice)
+STOC = Stochastic[21,3](TotalPrice)
+marron = (xrsi + xmf + BollOsc + (STOC / 3)) / 2
+verde = marron + oscp
+media = ExponentialAverage[m](marron)
+
+// ---- VIGIA10 ----
+ignored, ignored, ignored, ignored, ignored, filtro, sv, ignored = CALL "Blai5 VIGIA 10"
+
+// ---- ICHIMOKU ----
+tenkan = (Highest[9](High) + Lowest[9](Low)) / 2
+kijun  = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa0   = (tenkan + kijun) / 2
+ssb0   = (Highest[52](High) + Lowest[52](Low)) / 2
+ssa    = ssa0[26]
+ssb    = ssb0[26]
+kumoTop = Max(ssa, ssb)
+
+// ---- CONDICIONES KONCORDE: patron Primavera completo ----
+cK1 = verde > 0
+cK2 = azul  > 0
+cK3 = verde > marron
+cK4 = marron > media
+
+// ---- ICHIMOKU: tendencia mayor alcista ----
+cI1 = close > kumoTop
+cI2 = tenkan > kijun
+
+// ---- VIGIA10: momentum positivo y acelerando ----
+cV1 = filtro > 0
+cV2 = filtro > filtro[1]
+
+condicion = cK1 AND cK2 AND cK3 AND cK4 AND cI1 AND cI2 AND cV1 AND cV2
+
+SCREENER[condicion](verde AS "Verde", azul AS "Azul", marron AS "Marron", filtro AS "Filtro", sv AS "SV", Close AS "Precio")

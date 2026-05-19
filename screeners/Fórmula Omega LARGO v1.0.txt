@@ -1,0 +1,261 @@
+// ============================================================
+// FÓRMULA OMEGA — LARGO v1.0
+// Fusión Koncorde (ballenas) + Vigía10 (momentum) + Ichimoku
+// Objetivo: capturar movimientos alcistas del 20%+ con alta probabilidad
+// Timeframe: DIARIO · Universo: acciones $5–$200, volumen $1M+
+//
+// EDGE CENTRAL:
+//   El Azul de Koncorde detecta cuando las ballenas (institucionales)
+//   empiezan a acumular ANTES de que el retail lo note. Vigía10 confirma
+//   que el momentum interno se activa. La combinación de ambos reduce
+//   dramáticamente los falsos positivos respecto a usar cada uno solo.
+//
+// PUERTAS NÚCLEO (no negociables):
+//   1. Al menos UNA señal activa de ballena (Koncorde Azul)
+//   2. Al menos UNA señal activa de momentum (Vigía10 SV)
+//   3. CrossDW: tendencia semanal Koncorde alcista (marronW cruzó mediaW recientemente)
+//   4. Score >= scoreMin (calidad mínima de alineación)
+//
+// AJUSTE DE SEÑALES:
+//   Pocas señales → bajar scoreMin a 185 o subir bsCrossDWMax a 40
+//   Muchas señales → subir scoreMin a 215 o bajar bsCrossDWMax a 10
+// ============================================================
+
+// ---- PARÁMETROS AJUSTABLES ----
+minVolDolar = 1000000   // liquidez mínima diaria en dólares (20 sesiones)
+minPrice    = 5         // precio mínimo
+maxPrice    = 200       // precio máximo
+bsAzulMax    = 5         // barras desde cruce alcista azul (0=hoy, 5=esta semana)
+bsCrossDWMax = 25        // ventana CrossDW: días desde cruce semanal (25d ≈ 5 semanas)
+scoreMin     = 200        // umbral mínimo de calidad combinada
+m            = 3          // periodo EMA interna Koncorde (NO cambiar)
+
+// ================================================================
+// BLOQUE KONCORDE
+// Detecta actividad institucional (ballenas) vía NVI/PVI
+// Azul = manos fuertes (NVI normalizado)
+// Verde = manos débiles + tendencia (PVI + marron)
+// Marron = tendencia pura (RSI + MFI + BollOsc + Stoch)
+// ================================================================
+pvi = PositiveVolumeIndex(close)
+pvim = ExponentialAverage[m](pvi)
+pvimax = Highest[90](pvim)
+pvimin = Lowest[90](pvim)
+oscp = (pvi - pvim) * 100 / Max(pvimax - pvimin, 0.001)
+
+nvi = NegativeVolumeIndex(close)
+nvim = ExponentialAverage[m](nvi)
+nvimax = Highest[90](nvim)
+nvimin = Lowest[90](nvim)
+azul = (nvi - nvim) * 100 / Max(nvimax - nvimin, 0.001)
+
+xmf = MoneyFlowIndex[14]
+OB1 = (BollingerUp[25](TotalPrice) + BollingerDown[25](TotalPrice)) / 2
+OB2 = Max(BollingerUp[25](TotalPrice) - BollingerDown[25](TotalPrice), 0.001)
+BollOsc = ((TotalPrice - OB1) / OB2) * 100
+xrsi = RSI[14](TotalPrice)
+STOC = Stochastic[21,3](TotalPrice)
+marron = (xrsi + xmf + BollOsc + (STOC / 3)) / 2
+verde = marron + oscp
+media = ExponentialAverage[m](marron)
+
+// ================================================================
+// BLOQUE VIGÍA10
+// SV = señal principal (cruces de 0 y de MR son las mejores señales)
+// MR = media roja de SV (referencia de momentum)
+// BS/BI = bandas superior/inferior (detectan compresión interna)
+// filtro = EMA(20) de SV (tendencia lenta, confirma la dirección)
+// ================================================================
+ignored, ignored, BS, BI, ignored, SV, MR, ignored = CALL "Blai5 VIGIA 10"
+filtro = ExponentialAverage[20](SV)
+
+// ================================================================
+// BLOQUE ICHIMOKU
+// Estructura de precio: nube como soporte/resistencia dinámica
+// ================================================================
+tenkan = (Highest[9](High) + Lowest[9](Low)) / 2
+kijun  = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa0   = (tenkan + kijun) / 2
+ssb0   = (Highest[52](High) + Lowest[52](Low)) / 2
+ssa    = ssa0[26]
+ssb    = ssb0[26]
+kumoTop    = Max(ssa, ssb)
+
+// ================================================================
+// BLOQUE CrossDW — DOBLE TEMPORALIDAD (Blai5)
+// Aproximación semanal multiplicando periodos diarios × 5:
+//   m=3 diario   → m=15 semanal
+//   Highest[90]  → Highest[450]  (90 semanas × 5 días)
+//   RSI[14]      → RSI[70]       (14 semanas × 5 días)
+//   MFI[14]      → MFI[70]
+//   Bollinger[25] → Bollinger[125]
+//   Stoch[21,3]  → Stoch[105,15]
+//   EMA[3]       → EMA[15]
+// Confirma que el giro alcista diario tiene respaldo semanal:
+// sin tendencia semanal alcista la subida no llega al 20%+
+// ================================================================
+
+// Azul semanal (NVI normalizado con ventana semanal)
+nvimW   = ExponentialAverage[15](nvi)
+nvimaxW = Highest[450](nvimW)
+nviminW = Lowest[450](nvimW)
+azulW   = (nvi - nvimW) * 100 / Max(nvimaxW - nviminW, 0.001)
+
+// Marron semanal (tendencia Koncorde en escala semanal)
+xrsiW    = RSI[70](TotalPrice)
+xmfW     = MoneyFlowIndex[70]
+OB1W     = (BollingerUp[125](TotalPrice) + BollingerDown[125](TotalPrice)) / 2
+OB2W     = Max(BollingerUp[125](TotalPrice) - BollingerDown[125](TotalPrice), 0.001)
+BollOscW = ((TotalPrice - OB1W) / OB2W) * 100
+STOCW    = Stochastic[105,15](TotalPrice)
+marronW  = (xrsiW + xmfW + BollOscW + (STOCW / 3)) / 2
+mediaW   = ExponentialAverage[15](marronW)
+
+// CrossDW alcista: el marronW ACABA DE cruzar sobre su media (cruce reciente, no crónico)
+// barssince cuenta días diarios: 25 días ≈ 5 semanas = ventana de frescura razonable
+crossDWrecent = marronW CROSSES OVER mediaW
+bsCrossDW     = barssince(crossDWrecent)
+crossDW = bsCrossDW <= bsCrossDWMax AND marronW > mediaW
+
+// [DW1] 25 pts — Cruce DW muy fresco (esta semana o la anterior)
+sDW1 = (bsCrossDW <= 5) * 25
+// [DW2] 15 pts — Cruce DW reciente (últimas 2–3 semanas) y azul semanal positivo
+sDW2 = (bsCrossDW <= 15 AND azulW > 0) * 15
+// [DW3] 10 pts — Azul semanal positivo y creciendo (ballenas también en semanal)
+sDW3 = (azulW > 0 AND azulW > azulW[5]) * 10
+scoreDW = sDW1 + sDW2 + sDW3
+
+// ---- FILTRO BASE (liquidez y precio) ----
+volDolar = Average[20](Volume * Close)
+cBase = volDolar >= minVolDolar AND close >= minPrice AND close <= maxPrice
+
+// ================================================================
+// SCORING KONCORDE — señales de ballenas alcistas
+// Pesos más altos = señal más temprana y de mayor calidad
+// ================================================================
+
+// [K1] 35 pts — Azul cruza 0 recientemente: ballenas acaban de entrar
+// Es el NÚCLEO del edge: institucionales comprando antes de que el retail lo sepa
+crossAzul = azul CROSSES OVER 0
+bsAzul    = barssince(crossAzul)
+sK1 = (bsAzul <= bsAzulMax) * 35
+
+// [K2] 20 pts — Azul positivo y creciendo dos sesiones seguidas
+// Confirma que la entrada institucional no fue puntual sino sostenida
+sK2 = (azul > 0 AND azul > azul[1] AND azul > azul[2]) * 20
+
+// [K3] 15 pts — Azul por delante del verde (institucionales antes que el retail)
+// Ventana de oportunidad clásica de Koncorde: acumulación pre-pública
+sK3 = (azul > verde AND azul > 0) * 15
+
+// [K4] 15 pts — Verde negativo con azul positivo (acumulación pura)
+// Retail aún vendiendo mientras las ballenas compran = entrada temprana de calidad
+sK4 = (verde < 0 AND azul > 0) * 15
+
+// [K5] 10 pts — Marron sobre su media y acelerando (momentum de fondo Koncorde)
+sK5 = (marron > media AND marron > marron[1]) * 10
+
+// [K6] 8 pts — Spring incipiente: azul y verde positivos (toda la ola comprando)
+sK6 = (verde > 0 AND azul > 0) * 8
+
+// ================================================================
+// SCORING VIGÍA10 — señales de momentum interno
+// ================================================================
+
+// [V1] 30 pts — SV cruza 0 hacia arriba: señal Tipo4 (la más fuerte de Vigía10)
+// Equivalente al "azul cruzando 0" pero en el oscilador interno
+crossSV0 = SV CROSSES OVER 0
+bsSV0    = barssince(crossSV0)
+sV1 = (bsSV0 <= 3 AND SV > 0) * 30
+
+// [V2] 20 pts — SV cruza MR hacia arriba: señal temprana pre-cruce de 0
+// Detecta el giro antes de que SV llegue a cero
+crossSVMR = SV CROSSES OVER MR
+bsSVMR    = barssince(crossSVMR)
+sV2 = (bsSVMR <= 5) * 20
+
+// [V3] 15 pts — SV positivo subiendo dos sesiones seguidas (momentum confirmado)
+svSubiendo = SV > SV[1] AND SV[1] > SV[2]
+sV3 = (SV > 0 AND svSubiendo) * 15
+
+// [V4] 15 pts — Filtro cruza 0 recientemente (tendencia lenta se activa alcista)
+crossFiltro = filtro CROSSES OVER 0
+bsFiltro    = barssince(crossFiltro)
+sV4 = (bsFiltro <= 8) * 15
+
+// [V5] 12 pts — SV > MR > 0 y filtro positivo (alineación perfecta Vigía10)
+sV5 = (SV > MR AND MR > 0 AND filtro > 0) * 12
+
+// [V6] 10 pts — Filtro girando al alza (inercia lenta empieza a acompañar)
+sV6 = (filtro > filtro[1] AND filtro > filtro[3]) * 10
+
+// ================================================================
+// SCORING ICHIMOKU — estructura de precio y dirección
+// ================================================================
+
+// [I1] 15 pts — Precio sobre la nube (estructura estructural alcista confirmada)
+sI1 = (close > kumoTop) * 15
+
+// [I2] 10 pts — Tenkan > Kijun (impulso de corto plazo positivo)
+sI2 = (tenkan > kijun) * 10
+
+// [I3] 8 pts — Nube alcista adelantada (proyección futura positiva)
+sI3 = (ssa > ssb) * 8
+
+// [I4] 6 pts — Precio sobre Kijun pero aún bajo nube (pre-ruptura de nube)
+// Señal de oportunidad antes de la confirmación total
+sI4 = (close > kijun AND close < kumoTop) * 6
+
+// ================================================================
+// SCORING COMPRESIÓN — energía cinética acumulada pre-movimiento
+// Cuanto más comprimida la acción, mayor el movimiento al liberarse
+// ================================================================
+
+// [C1] 12 pts — ATR comprimido vs su media: energía cinética acumulada
+atr14    = AverageTrueRange[14]
+atrMedio = Average[20](atr14)
+sC1 = (atr14 < atrMedio * 0.85) * 12
+
+// [C2] 10 pts — Bandas Vigía10 comprimidas (squeeze interno del indicador)
+anchActual = BS - BI
+anchMedia  = Average[20](anchActual)
+sC2 = (anchActual < anchMedia * 0.80) * 10
+
+// [C3] 8 pts — SV dentro de bandas y subiendo (compresión interna activa)
+sC3 = (SV > BI AND SV < BS AND svSubiendo) * 8
+
+// ================================================================
+// SCORING PRECIO/VOLUMEN — confirmación de la acción del precio
+// ================================================================
+
+volRel = Volume / Average[20](Volume)
+sP1 = (volRel >= 1.5) * 12            // volumen significativo (1.5x la media)
+sP2 = (volRel >= 1.2 AND volRel < 1.5) * 6
+sP3 = (close > open) * 8              // vela alcista (cierre > apertura)
+sP4 = (close > Highest[10](Close[1])) * 10  // ruptura de máximo de 10 días
+
+// ================================================================
+// SCORE FINAL Y CONDICIÓN
+// ================================================================
+
+scoreK  = sK1 + sK2 + sK3 + sK4 + sK5 + sK6     // máx teórico: 103
+scoreV  = sV1 + sV2 + sV3 + sV4 + sV5 + sV6     // máx teórico: 102
+scoreI  = sI1 + sI2 + sI3 + sI4                  // máx teórico: 39
+scoreC  = sC1 + sC2 + sC3                         // máx teórico: 30
+scoreP  = sP1 + sP2 + sP3 + sP4                   // máx teórico: 36
+score   = scoreK + scoreV + scoreI + scoreC + scoreP + scoreDW  // máx teórico: 360
+
+// ---- PUERTAS NÚCLEO (se deben cumplir las TRES) ----
+// Ballena: cruce fresco de azul (K1) o azul positivo creciendo (K2)
+// sK3/sK4 solo suman score pero NO son suficientes para pasar la puerta
+hayBallena = (sK1 > 0) OR (sK2 > 0)
+// Momentum: cruce fresco de SV sobre 0 (V1) o sobre MR (V2)
+// sV3 (SV positivo y subiendo) es demasiado genérico: lo cumple toda tendencia alcista
+hayMomentum = (sV1 > 0) OR (sV2 > 0)
+// CrossDW: tendencia semanal Koncorde alcista (marronW cruzó mediaW recientemente)
+// Sin respaldo semanal la subida no tiene combustible para el 20%+
+
+condicion = cBase AND hayBallena AND hayMomentum AND crossDW AND score >= scoreMin
+
+// Ordenar por score descendente (mejor calidad primero)
+SCREENER[condicion](score AS "Score", azulW AS "AzulW", scoreK AS "ScoreK", scoreV AS "ScoreV", azul AS "Azul", SV AS "SV", filtro AS "Filtro", bsAzul AS "BsAzul", close AS "Precio")

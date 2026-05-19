@@ -1,0 +1,132 @@
+// ============================================================
+// SCREENER: PENNY SPRING EXTREME v1.0
+// NYSE + Nasdaq | Largos | Diario | $0.10-$5
+// Filosofía: penny stocks muy castigadas (cerca de mínimos 60d,
+// bajo o dentro de la nube) con Selling Climax masivo (5x-10x vol)
+// absorbido por compradores → compresión post-spike → spring explosivo.
+// Wyckoff: Selling Climax → Automatic Rally → Secondary Test → Spring.
+// Objetivo: detectar pre-movimiento de +100-500% en 1-5 días.
+// Ajuste si pocas señales: baja spikeVol a 3x o distMin60 a 35%
+// ============================================================
+
+// ---- VIGÍA10 ----
+ignored, ignored, ignored, ignored, ignored, filtro, sv, mr = CALL "Blai5 VIGIA 10"
+
+// ---- LIQUIDEZ ----
+avgVol   = Average[20](volume)
+dolarVol = close * avgVol
+volRel   = volume / avgVol
+
+// ---- ICHIMOKU ----
+tenkan  = (Highest[9](High)  + Lowest[9](Low))  / 2
+kijun   = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa0    = (tenkan + kijun) / 2
+ssb0    = (Highest[52](High) + Lowest[52](Low)) / 2
+kumoTop = Max(ssa0, ssb0)
+kumoBot = Min(ssa0, ssb0)
+
+// ============================================================
+// PILAR 1 — PROFUNDIDAD DEL CASTIGO
+// Stock muy cerca de mínimos de 60 días, bajo o dentro de la nube
+// ============================================================
+minimo60  = Lowest[60](Low)
+distMin60 = (close - minimo60) / (close + 0.001) * 100
+cercaMin  = distMin60 < 25
+
+bajaNube = close < kumoBot
+enNube   = close >= kumoBot AND close <= kumoTop
+bajoKumo = close <= kumoTop
+
+// El stock venía cayendo antes del spike (downtrend previo confirmado)
+tendBajista = close[10] > close[20]
+
+// ============================================================
+// PILAR 2 — SELLING CLIMAX + ABSORCIÓN + COMPRESIÓN POST
+// Spike masivo de pánico absorbido por compradores institucionales
+// seguido de compresión: la calma antes del spring
+// ============================================================
+
+// Spike de volumen masivo (>= 5x media) en alguna de las últimas 7 barras
+spike0 = volume    >= avgVol * 5
+spike1 = volume[1] >= avgVol * 5
+spike2 = volume[2] >= avgVol * 5
+spike3 = volume[3] >= avgVol * 5
+spike4 = volume[4] >= avgVol * 5
+spike5 = volume[5] >= avgVol * 5
+spike6 = volume[6] >= avgVol * 5
+spikeVol = spike0 OR spike1 OR spike2 OR spike3 OR spike4 OR spike5 OR spike6
+
+// Absorción en la barra del spike: compradores dominaron a los vendedores
+absSpike0 = spike0 AND close   > (High   + Low)   / 2
+absSpike1 = spike1 AND close[1] > (High[1] + Low[1]) / 2
+absSpike2 = spike2 AND close[2] > (High[2] + Low[2]) / 2
+absSpike3 = spike3 AND close[3] > (High[3] + Low[3]) / 2
+absSpike4 = spike4 AND close[4] > (High[4] + Low[4]) / 2
+absSpike5 = spike5 AND close[5] > (High[5] + Low[5]) / 2
+absSpike6 = spike6 AND close[6] > (High[6] + Low[6]) / 2
+absorcionSpike = absSpike0 OR absSpike1 OR absSpike2 OR absSpike3 OR absSpike4 OR absSpike5 OR absSpike6
+
+// Compresión post-spike: últimas 3 barras quietas (energía acumulada)
+rangoPost = (Highest[3](High) - Lowest[3](Low)) / (close + 0.001) * 100
+compresionPost = rangoPost < 10
+
+// Precio sostenido sobre el mínimo del spike (compradores aguantan)
+lowSpike = Lowest[7](Low)[1]
+precioSostenido = close > lowSpike * 1.01
+
+// Tamaño del spike para output
+spikeX = Highest[7](volume) / (avgVol + 0.001)
+
+// ============================================================
+// PILAR 3 — VIGÍA10 REMONTANDO DESDE LO PROFUNDO
+// sv venía en territorio muy negativo y empieza a remontar
+// ============================================================
+svSube       = sv > sv[1] AND sv[1] > sv[2]
+svConFuerza  = (sv - sv[1]) >= (sv[1] - sv[2])
+svDesdePozo  = sv[5] < -40 AND sv > sv[5]    // sv estaba en el pozo y remonta
+svRemonta    = sv > sv[3] AND sv > sv[5]     // sv sube en ventana 5 días
+svCruzaPos   = sv > 0 AND sv[3] <= 0
+svSobreMR    = sv > mr
+filtroGira   = filtro > filtro[3] AND filtro > filtro[5]
+
+// ============================================================
+// HARD GATE FINAL
+// ============================================================
+baseOk = close >= 0.10 AND close <= 5 AND dolarVol >= 300000 AND cercaMin AND bajoKumo AND spikeVol AND compresionPost AND precioSostenido AND svSube
+
+// ============================================================
+// SCORING — calidad de los tres pilares
+// Los hard gates no puntúan: score es genuino
+// ============================================================
+
+// ---- PILAR 1: Profundidad del castigo ----
+s1 = (distMin60 < 10) * 20                          // en los mínimos: máximo castigo = máximo potencial
+s2 = (distMin60 >= 10 AND distMin60 < 20) * 12      // cerca de mínimos
+s3 = bajaNube * 20                                   // bajo la nube: zona de máximo castigo
+s4 = enNube * 10                                     // en la nube: transitando desde el castigo
+s5 = tendBajista * 8                                 // downtrend previo confirmado
+
+// ---- PILAR 2: Calidad del Selling Climax ----
+s6  = (Highest[7](volume) >= avgVol * 10) * 20      // spike 10x: selling climax extremo
+s7  = (Highest[7](volume) >= avgVol * 5 AND Highest[7](volume) < avgVol * 10) * 12
+s8  = absorcionSpike * 20                            // compradores absorbieron el pánico
+s9  = (rangoPost < 5) * 15                          // compresión extrema post-spike: energía máxima
+s10 = (rangoPost >= 5 AND rangoPost < 10) * 8       // compresión buena
+s11 = precioSostenido * 10                          // precio aguanta sobre el low del spike
+
+// ---- PILAR 3: Calidad del giro Vigía10 desde lo profundo ----
+s12 = svDesdePozo * 20                              // sv desde el pozo: giro del peor momento
+s13 = svRemonta * 15                                // sv remontando en ventana 5 días
+s14 = svCruzaPos * 20                              // sv acaba de cruzar a positivo: señal máxima
+s15 = svConFuerza * 10                             // sv acelerando: el giro gana fuerza
+s16 = svSobreMR * 10                               // sv sobre mr: momentum comprador activo
+s17 = filtroGira * 8                               // filtro girando: fondo empieza a mejorar
+s18 = (sv > 0) * 8                                // sv positivo: confirmado
+
+// ---- SCORE TOTAL ----
+score = s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14 + s15 + s16 + s17 + s18
+
+// ---- CONDICIÓN FINAL ----
+condicion = baseOk AND score >= 55
+
+SCREENER[score * condicion](score, distMin60 AS "DistMin%", rangoPost AS "Post%", spikeX AS "SpikeX", sv, volRel AS "VolX", close)

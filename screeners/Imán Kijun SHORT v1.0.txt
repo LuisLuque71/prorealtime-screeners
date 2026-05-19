@@ -1,0 +1,127 @@
+// ============================================================
+// SCREENER: Imán Kijun SHORT v1.0
+// NYSE/NASDAQ - Daily
+// Filosofía: stock en caída tras subida explosiva → reversión
+// bajista hasta el kijun. Todo suma, nada bloquea.
+// ============================================================
+// AVISO: Preferentemente para PUT options. Short directo en
+// small caps tiene riesgo de squeeze elevado.
+// Ajuste si pocas señales: baja dolarVol a 750000 o scoreMin a 45
+// ============================================================
+
+// --- HARD GATES (precio y liquidez mínima) ---
+dolarVol  = close * average[20](volume)
+cPrecio   = close >= 1 AND close <= 50
+cVolumen  = dolarVol >= 1000000
+
+// --- ICHIMOKU ---
+tenkan = (Highest[9](High)  + Lowest[9](Low))  / 2
+kijun  = (Highest[26](High) + Lowest[26](Low)) / 2
+
+// Kumo actual (desplazado 26 barras)
+ssa0 = (tenkan + kijun) / 2
+ssb0 = (Highest[52](High) + Lowest[52](Low)) / 2
+ssa  = ssa0[26]
+ssb  = ssb0[26]
+nubeTop    = Max(ssa, ssb)
+nubeBot    = Min(ssa, ssb)
+nubeGrosor = (nubeTop - nubeBot) / (nubeBot + 0.0001) * 100
+
+// --- KIJUN: estabilidad del target (scoring, no hard gate) ---
+// Nota: tras un pico explosivo el kijun está en movimiento; se mide
+// como bonus, no se exige plano desde el inicio
+kijunHigh10 = Highest[10](kijun)
+kijunLow10  = Lowest[10](kijun)
+kijunRango  = (kijunHigh10 - kijunLow10) / (kijun + 0.0001) * 100
+
+// --- PRECIO SOBRE KIJUN (kijun = objetivo bajista) ---
+cAbove    = close > kijun
+distAbove = (close - kijun) / (kijun + 0.0001) * 100
+cDist     = distAbove >= 12 AND distAbove <= 50
+
+// --- SUBIDA PREVIA EXPLOSIVA ---
+// El máximo de las últimas 25 barras supera un 30%+ al precio de hace 25 barras
+maxReciente = Highest[25](High)
+subioPrevio = maxReciente > close[25] * 1.30
+
+// --- PICO ANTIGUO (mínimo 3 sesiones antes, no atrapar el primer día) ---
+cPicoViejo = Highest[5](High) < Highest[25](High) * 0.97
+
+// --- VIGÍA10 ---
+ignored, ignored, ignored, ignored, ignored, filtro, sv, mr = CALL "Blai5 VIGIA 10"
+
+// --- SV GIRANDO A LA BAJA (agotamiento alcista) ---
+svBajando  = sv < sv[1]
+svBajando2 = sv < sv[1] AND sv[1] < sv[2]
+
+// --- CONVERGENCIA ACTIVA HOY ---
+// La distancia al kijun se acorta: precio ya cayendo hacia el objetivo
+cReversionActiva = distAbove < distAbove[1]
+
+// --- HARD GATE FINAL ---
+baseOk = cPrecio AND cVolumen AND cAbove AND cDist AND subioPrevio AND cPicoViejo AND svBajando AND cReversionActiva
+
+// ============================================================
+// SCORING — todo suma, nada bloquea
+// Los setups con nube arriba o kijun plano flotan más arriba.
+// ============================================================
+
+// --- NUBE ENCIMA (escenario óptimo — scoring, no hard gate) ---
+// La nube actual está sobre el precio: resistencia técnica confirmada
+// Nota: solo ocurre si el pico fue hace ~26+ barras (geometría Ichimoku)
+s1 = (close < nubeBot) * 25          // precio bajo la nube: camino libre hasta kijun
+s2 = (close >= nubeBot AND close <= nubeTop) * 10   // dentro de la nube
+s3 = (ssa < ssb) * 12                // nube roja: estructura bajista confirmada
+s4 = (ssa0 < ssb0) * 8              // nube futura también bajista
+s5 = (nubeGrosor > 10) * 8          // nube gruesa: barrera fuerte sobre el precio
+
+// --- KIJUN PLANA (target estable) ---
+s6 = (kijunRango < 3) * 20
+s7 = (kijunRango >= 3 AND kijunRango < 6) * 10
+s8 = (kijunRango >= 6 AND kijunRango < 10) * 5
+
+// --- INTENSIDAD DE LA SUBIDA PREVIA ---
+// Cuanto más explosiva fue la subida, más energía acumulada para revertir
+s9  = (maxReciente > close[25] * 2.0) * 20
+s10 = (maxReciente > close[25] * 1.5 AND maxReciente <= close[25] * 2.0) * 12
+s11 = (maxReciente > close[25] * 1.3 AND maxReciente <= close[25] * 1.5) * 5
+
+// --- ZONA DE DISTANCIA AL KIJUN (potencial bajista) ---
+s12 = (distAbove >= 12 AND distAbove < 20) * 8
+s13 = (distAbove >= 20 AND distAbove < 35) * 18
+s14 = (distAbove >= 35 AND distAbove <= 50) * 12
+
+// --- CONVERGENCIA CONFIRMADA EN EL TIEMPO ---
+s15 = (distAbove < distAbove[3]) * 15           // acercándose 3 barras seguidas
+s16 = (Highest[5](High) < Highest[25](High) * 0.93) * 10  // pico claramente atrás
+
+// --- VIGÍA10 — calidad del giro bajista ---
+s17 = svBajando2 * 15               // giro confirmado 2 barras
+s18 = (sv < mr) * 10                // sv bajo mr: impulso vendedor claro
+s19 = (sv < 0) * 12                 // sv cruzó a negativo: señal bajista plena
+s20 = (filtro < filtro[3]) * 10     // filtro deteriorándose en los últimos 3 días
+s21 = (filtro < 20) * 8             // filtro no en zona alcista fuerte
+
+// --- KIJUN BAJANDO (target se acerca desde abajo) ---
+s22 = (kijun < kijun[5]) * 8
+
+// --- PRICE ACTION BAJISTA ---
+s23 = (close < open) * 10           // vela bajista hoy
+s24 = (close < close[1]) * 8        // precio cae vs ayer
+
+// --- VOLUMEN EN VELAS BAJISTAS (distribución institucional) ---
+volRel = volume / average[20](volume)
+s25 = (volRel >= 1.5 AND close < open) * 15    // volumen alto + vela roja
+s26 = (volRel >= 1.2 AND volRel < 1.5 AND close < open) * 8
+
+// --- TENKAN CONFIRMANDO LA CAÍDA ---
+s27 = (tenkan < tenkan[3]) * 8      // media corta girando a la baja
+s28 = (close < tenkan) * 8          // precio ya bajo la media corta
+
+// --- SCORE TOTAL ---
+score = s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14 + s15 + s16 + s17 + s18 + s19 + s20 + s21 + s22 + s23 + s24 + s25 + s26 + s27 + s28
+
+// --- CONDICIÓN FINAL ---
+condicion = baseOk AND score >= 55
+
+SCREENER[score * condicion](score, distAbove AS "Dist%", sv, mr, filtro, close, volRel)

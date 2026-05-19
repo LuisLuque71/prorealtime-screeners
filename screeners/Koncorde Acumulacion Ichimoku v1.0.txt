@@ -1,0 +1,63 @@
+// ============================================================
+// KONCORDE ACUMULACION v2.1
+// Fase acumulacion: azul>0 y azul>verde (institucionales dominan)
+// Verde girando al alza 3 dias: transicion inminente hacia Primavera
+// Timeframe: DIARIO
+// Si salen 0: baja minVolDolar a 250000 o quita cK5
+// Si salen demasiados: sube minVolDolar a 1000000 o añade azul > azul[1]
+// ============================================================
+
+// ---- PARAMETROS ----
+minVolDolar = 500000
+minPrice    = 5
+maxPrice    = 500
+
+m = 3
+
+// ---- KONCORDE ----
+pvi = PositiveVolumeIndex(close)
+pvim = ExponentialAverage[m](pvi)
+pvimax = Highest[90](pvim)
+pvimin = Lowest[90](pvim)
+oscp = (pvi - pvim) * 100 / Max(pvimax - pvimin, 0.001)
+
+nvi = NegativeVolumeIndex(close)
+nvim = ExponentialAverage[m](nvi)
+nvimax = Highest[90](nvim)
+nvimin = Lowest[90](nvim)
+azul = (nvi - nvim) * 100 / Max(nvimax - nvimin, 0.001)
+
+xmf = MoneyFlowIndex[14]
+OB1 = (BollingerUp[25](TotalPrice) + BollingerDown[25](TotalPrice)) / 2
+OB2 = Max(BollingerUp[25](TotalPrice) - BollingerDown[25](TotalPrice), 0.001)
+BollOsc = ((TotalPrice - OB1) / OB2) * 100
+xrsi = RSI[14](TotalPrice)
+STOC = Stochastic[21,3](TotalPrice)
+marron = (xrsi + xmf + BollOsc + (STOC / 3)) / 2
+verde = marron + oscp
+
+// ---- VIGIA10 ----
+ignored, ignored, ignored, ignored, ignored, filtro, sv, ignored = CALL "Blai5 VIGIA 10"
+
+// ---- ICHIMOKU ----
+kijun = (Highest[26](High) + Lowest[26](Low)) / 2
+
+// ---- FILTROS BASICOS ----
+volDolar = Average[20](Volume * Close)
+cBase = volDolar >= minVolDolar AND Close >= minPrice AND Close <= maxPrice
+
+// ---- FASE ACUMULACION: institucionales dominan sobre retail ----
+cK1 = azul > 0              // smart money activo
+cK2 = azul > verde          // azul domina: definicion exacta de acumulacion
+cK3 = azul > azul[1]        // momentum institucional creciendo
+
+// ---- SEÑAL DE ENTRADA: verde girando desde el suelo ----
+cK4 = verde > verde[1]      // verde sube hoy
+cK5 = verde > verde[3]      // confirmado: lleva 3 dias recuperando
+
+// ---- VIGIA10: girando (puede ser negativo pero mejorando) ----
+cV1 = filtro > filtro[1]
+
+condicion = cBase AND cK1 AND cK2 AND cK3 AND cK4 AND cK5 AND cV1
+
+SCREENER[condicion](verde AS "Verde", azul AS "Azul", marron AS "Marron", filtro AS "Filtro", sv AS "SV", kijun AS "Kijun", Close AS "Precio")
