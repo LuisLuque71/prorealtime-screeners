@@ -1,0 +1,264 @@
+// ============================================================
+// FÓRMULA OMEGA — CORTO v2.0
+// Fusión Koncorde (ballenas) + Vigía10 (momentum) + Ichimoku
+// Objetivo: capturar el INICIO de caídas del 20%+ — entrada temprana
+// Timeframe: DIARIO · Universo: acciones $5–$500, volumen $3M+
+// ============================================================
+// DIFERENCIA CLAVE VS v1.0:
+//   v1.0 detectaba: institucionales ya fuera + momentum bajista activado
+//   v2.0 detecta:   distribución silenciosa (divergencia) + stock cerca del techo
+//   La señal temprana es azul cayendo ANTES o justo al cruzar cero mientras
+//   el precio sigue plano/arriba. Entrar en caída ya avanzada es tarde.
+// ============================================================
+// CAMBIOS VS v1.0:
+//   [FIX] bsAzulMax 8 → 5: solo cruces muy frescos de azul
+//   [FIX] bsCrossDWMax 25 → 12: cruce semanal en últimas 2.5 semanas
+//   [FIX] scoreMin 210 → 215: menos ruido, más convicción
+//   [FIX] sK6 peso 12 → 6: pánik tardío, menor relevancia en entrada temprana
+//   [FIX] SCREENER[condicion] → SCREENER[score*condicion]: ranking automático
+//   [NUEVO] cNoHundido: excluye stocks ya -30% desde máximos (entrada tardía)
+//   [NUEVO] cSinGap: excluye rebotes explosivos del día (no entrar contra spike)
+//   [NUEVO] hayBallena incluye divergenciaBaj: puerta abierta para pre-cruce
+//   [NUEVO K0] divergenciaBaj: azul cae mientras precio sube = distribución
+//     silenciosa ANTES del cruce — señal de máximo peso del screener (35 pts)
+//   [NUEVO K2b] azulAceleraBaj: azul cayendo 3 sesiones seguidas (15 pts)
+//   [NUEVO P4/P5] cercaDelTecho: stock dentro del 10-20% de máximos (20/10 pts)
+//     = entrada temprana con mejor R/R
+// ============================================================
+// AJUSTE DE SEÑALES:
+//   Pocas señales → bajar scoreMin a 195 o subir bsCrossDWMax a 20
+//   Muchas señales → subir scoreMin a 235 o bajar bsAzulMax a 3
+// ============================================================
+
+// ---- PARÁMETROS AJUSTABLES ----
+minVolDolar  = 3000000   // liquidez mínima para cortos (préstamo más fácil)
+minPrice     = 5
+maxPrice     = 500
+bsAzulMax    = 5         // barras desde cruce bajista azul bajo 0 (↓ de 8)
+bsCrossDWMax = 12        // días desde cruce semanal ≈ 2.5 semanas (↓ de 25)
+scoreMin     = 215       // umbral mínimo de calidad combinada (↑ de 210)
+m            = 3         // periodo EMA interna Koncorde (NO cambiar)
+
+// ================================================================
+// BLOQUE KONCORDE
+// ================================================================
+pvi = PositiveVolumeIndex(close)
+pvim = ExponentialAverage[m](pvi)
+pvimax = Highest[90](pvim)
+pvimin = Lowest[90](pvim)
+oscp = (pvi - pvim) * 100 / Max(pvimax - pvimin, 0.001)
+
+nvi = NegativeVolumeIndex(close)
+nvim = ExponentialAverage[m](nvi)
+nvimax = Highest[90](nvim)
+nvimin = Lowest[90](nvim)
+azul = (nvi - nvim) * 100 / Max(nvimax - nvimin, 0.001)
+
+xmf = MoneyFlowIndex[14]
+OB1 = (BollingerUp[25](TotalPrice) + BollingerDown[25](TotalPrice)) / 2
+OB2 = Max(BollingerUp[25](TotalPrice) - BollingerDown[25](TotalPrice), 0.001)
+BollOsc = ((TotalPrice - OB1) / OB2) * 100
+xrsi = RSI[14](TotalPrice)
+STOC = Stochastic[21,3](TotalPrice)
+marron = (xrsi + xmf + BollOsc + (STOC / 3)) / 2
+verde = marron + oscp
+media = ExponentialAverage[m](marron)
+
+// ================================================================
+// BLOQUE VIGÍA10
+// ================================================================
+ignored, ignored, ignored, ignored, ignored, SV, MR, ignored = CALL "Blai5 VIGIA 10"
+filtro = ExponentialAverage[20](SV)
+
+// ================================================================
+// BLOQUE ICHIMOKU
+// ================================================================
+tenkan = (Highest[9](High) + Lowest[9](Low)) / 2
+kijun  = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa0   = (tenkan + kijun) / 2
+ssb0   = (Highest[52](High) + Lowest[52](Low)) / 2
+ssa    = ssa0[26]
+ssb    = ssb0[26]
+kumoBottom = Min(ssa, ssb)
+
+// ================================================================
+// BLOQUE CrossDW — DOBLE TEMPORALIDAD (Blai5)
+// Aproximación semanal multiplicando periodos diarios × 5:
+//   m=3 diario  → m=15 semanal
+//   Highest[90] → Highest[450]  (90 semanas × 5 días)
+//   RSI[14]     → RSI[70]
+//   MFI[14]     → MFI[70]
+//   Bollinger[25]→ Bollinger[125]
+//   Stoch[21,3] → Stoch[105,15]
+//   EMA[3]      → EMA[15]
+// Confirma que el giro bajista diario tiene respaldo semanal
+// ================================================================
+nvimW   = ExponentialAverage[15](nvi)
+nvimaxW = Highest[450](nvimW)
+nviminW = Lowest[450](nvimW)
+azulW   = (nvi - nvimW) * 100 / Max(nvimaxW - nviminW, 0.001)
+
+xrsiW    = RSI[70](TotalPrice)
+xmfW     = MoneyFlowIndex[70]
+OB1W     = (BollingerUp[125](TotalPrice) + BollingerDown[125](TotalPrice)) / 2
+OB2W     = Max(BollingerUp[125](TotalPrice) - BollingerDown[125](TotalPrice), 0.001)
+BollOscW = ((TotalPrice - OB1W) / OB2W) * 100
+STOCW    = Stochastic[105,15](TotalPrice)
+marronW  = (xrsiW + xmfW + BollOscW + (STOCW / 3)) / 2
+mediaW   = ExponentialAverage[15](marronW)
+
+crossDWrecent = marronW CROSSES UNDER mediaW
+bsCrossDW     = barssince(crossDWrecent)
+crossDW = bsCrossDW <= bsCrossDWMax AND marronW < mediaW
+
+// [DW1] 25 pts — Cruce DW muy fresco (esta semana o la anterior)
+sDW1 = (bsCrossDW <= 5) * 25
+// [DW2] 15 pts — Cruce DW reciente (últimas 2-3 semanas) y azul semanal negativo
+sDW2 = (bsCrossDW <= 15 AND azulW < 0) * 15
+// [DW3] 10 pts — Azul semanal negativo y cayendo (institucionales fuera en semanal)
+sDW3 = (azulW < 0 AND azulW < azulW[5]) * 10
+scoreDW = sDW1 + sDW2 + sDW3
+
+// ================================================================
+// FILTROS BASE Y NUEVOS GATES v2.0
+// ================================================================
+volDolar = Average[20](Volume * Close)
+cBase    = volDolar >= minVolDolar AND close >= minPrice AND close <= maxPrice
+
+// Anti-hundido: excluye stocks ya -30% desde máximos de 60 días
+// Un stock -30% ya hizo el recorrido — riesgo de squeeze y entrada tardía
+max60       = Highest[60](High)
+distFromTop = (max60 - close) / (max60 + 0.0001) * 100
+cNoHundido  = distFromTop < 30
+
+// Anti-rebote intradía: excluye spikes alcistas del día (no entrar en spike)
+// Stocks +10%+ hoy: noticias/catalizador que invalidan el setup bajista
+movHoy  = (close - close[1]) / (close[1] + 0.0001) * 100
+cSinGap = movHoy <= 10
+
+// ================================================================
+// SCORING KONCORDE v2.0
+// ================================================================
+
+// [K0] 35 pts — SEÑAL PREMIUM: distribución silenciosa pre-cruce
+// Azul cae mientras precio sube: institucionales salen, retail aún compra
+// Es la señal ANTES del cruce de azul bajo cero — el momento más valioso
+// Análogo a divergenciaAlc en LONG: mayor peso del bloque Koncorde
+divergenciaBaj = azul < azul[3] AND close > close[3]
+sK0 = divergenciaBaj * 35
+
+// [K1] 35 pts — Azul cruza bajo 0 recientemente (ventana ajustada a 5 barras)
+// NÚCLEO: institucionales acaban de salir, retail aún aguanta
+crossAzulNeg = azul CROSSES UNDER 0
+bsAzul       = barssince(crossAzulNeg)
+sK1 = (bsAzul <= bsAzulMax AND azul < 0) * 35
+
+// [K2] 20 pts — Azul negativo y cayendo dos sesiones seguidas
+// Salida institucional sostenida y acelerada (no puntual)
+sK2 = (azul < 0 AND azul < azul[1] AND azul < azul[2]) * 20
+
+// [K2b] 15 pts — NUEVO: azul acelerando a la baja tres sesiones consecutivas
+// Diferencia un azul estabilizado de uno en caída activa — más temprano que K2
+azulAceleraBaj = azul < azul[1] AND azul < azul[2] AND azul < azul[3]
+sK2b = azulAceleraBaj * 15
+
+// [K3] 15 pts — Retail atrapado: verde muy por encima del azul negativo
+// Cuanta más diferencia, más potencial de caída cuando el retail capitule
+trampa = verde - azul
+sK3 = (trampa > 20 AND azul < 0) * 15
+
+// [K4] 15 pts — Verde muy positivo con azul negativo (trampa máxima)
+sK4 = (verde > 20 AND azul < 0) * 15
+
+// [K5] 10 pts — Marron perdiendo su media (momentum general girándose)
+sK5 = (marron < media AND marron < marron[1]) * 10
+
+// [K6] 6 pts — Pánik: azul Y verde negativos (aceleración tardía)
+// ↓ de 12 a 6: señal de pánico avanzado, no de inicio — v2.0 busca anticiparse
+sK6 = (verde < 0 AND azul < 0) * 6
+
+// ================================================================
+// SCORING VIGÍA10 v2.0 (sin cambios — lógica sólida)
+// ================================================================
+
+// [V1] 30 pts — SV cruza 0 hacia abajo: señal bajista máxima de Vigía10
+crossSV0neg = SV CROSSES UNDER 0
+bsSV0neg    = barssince(crossSV0neg)
+sV1 = (bsSV0neg <= 3 AND SV < 0) * 30
+
+// [V2] 20 pts — SV cruza bajo MR: señal bajista temprana (antes del cruce de 0)
+crossSVMRneg = SV CROSSES UNDER MR
+bsSVMRneg    = barssince(crossSVMRneg)
+sV2 = (bsSVMRneg <= 5) * 20
+
+// [V3] 15 pts — SV negativo y cayendo dos sesiones (momentum bajista confirmado)
+svBajando = SV < SV[1] AND SV[1] < SV[2]
+sV3 = (SV < 0 AND svBajando) * 15
+
+// [V4] 15 pts — Filtro cruza bajo 0 recientemente (tendencia lenta gira bajista)
+crossFiltroBaj = filtro CROSSES UNDER 0
+bsFiltroBaj    = barssince(crossFiltroBaj)
+sV4 = (bsFiltroBaj <= 8) * 15
+
+// [V5] 12 pts — SV < MR < 0 y filtro negativo (alineación bajista perfecta)
+sV5 = (SV < MR AND MR < 0 AND filtro < 0) * 12
+
+// [V6] 10 pts — Filtro girando a la baja (inercia lenta confirma dirección)
+sV6 = (filtro < filtro[1] AND filtro < filtro[3]) * 10
+
+// ================================================================
+// SCORING ICHIMOKU v2.0 (sin cambios)
+// ================================================================
+
+// [I1] 15 pts — Precio bajo la nube (estructura bajista confirmada)
+sI1 = (close < kumoBottom) * 15
+
+// [I2] 10 pts — Tenkan < Kijun (impulso de corto plazo negativo)
+sI2 = (tenkan < kijun) * 10
+
+// [I3] 8 pts — Nube bajista (proyección futura negativa: SSB > SSA)
+sI3 = (ssb > ssa) * 8
+
+// [I4] 6 pts — Precio bajo Kijun pero aún sobre nube (pre-ruptura bajista)
+sI4 = (close < kijun AND close > kumoBottom) * 6
+
+// ================================================================
+// SCORING PRECIO/POSICIÓN v2.0
+// NUEVO: cercaDelTecho — calidad de la entrada temprana
+// ================================================================
+volRel = Volume / Average[20](Volume)
+
+// [P1] 12 pts — Volumen elevado en la sesión bajista
+sP1 = (volRel >= 1.5) * 12
+
+// [P2] 8 pts — Vela bajista hoy (cierre < apertura)
+sP2 = (close < open) * 8
+
+// [P3] 10 pts — Ruptura de mínimo de 10 días (aceleración bajista)
+sP3 = (close < Lowest[10](Close[1])) * 10
+
+// [P4] 20 pts — NUEVO: stock dentro del 10% del máximo de 60 días
+// Mejor R/R y confirmación de entrada temprana — precio aún no cayó
+sP4 = (distFromTop < 10) * 20
+
+// [P5] 10 pts — NUEVO: stock dentro del 10-20% del máximo de 60 días
+sP5 = (distFromTop >= 10 AND distFromTop < 20) * 10
+
+// ================================================================
+// SCORE FINAL Y CONDICIÓN
+// ================================================================
+scoreK = sK0 + sK1 + sK2 + sK2b + sK3 + sK4 + sK5 + sK6   // máx teórico: 151
+scoreV = sV1 + sV2 + sV3 + sV4 + sV5 + sV6                  // máx teórico: 102
+scoreI = sI1 + sI2 + sI3 + sI4                               // máx teórico: 39
+scoreP = sP1 + sP2 + sP3 + sP4 + sP5                         // máx teórico: 60
+score  = scoreK + scoreV + scoreI + scoreP + scoreDW          // máx teórico: 402
+
+// ---- PUERTAS NÚCLEO v2.0 ----
+// hayBallena incluye divergenciaBaj: permite setups pre-cruce (distribución)
+hayBallena  = divergenciaBaj OR (sK1 > 0) OR (sK2 > 0)
+// hayMomentum: cruce fresco de SV bajo 0 (V1) o bajo MR (V2)
+hayMomentum = (sV1 > 0) OR (sV2 > 0)
+
+condicion = cBase AND hayBallena AND hayMomentum AND crossDW AND cNoHundido AND cSinGap AND score >= scoreMin
+
+SCREENER[score * condicion](score AS "Score", distFromTop AS "DistTop%", divergenciaBaj AS "DivBaj", trampa AS "Trampa", azulW AS "AzulW", scoreK AS "ScoreK", scoreV AS "ScoreV", azul AS "Azul", SV AS "SV", filtro AS "Filtro", bsAzul AS "BsAzul", close AS "Precio")
