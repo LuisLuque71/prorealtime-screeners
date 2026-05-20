@@ -133,4 +133,6 @@ tipoNum = tipoB * 4 + tipoA * 3 + tipoC * 2 + tipoD * 1
 scoreOrden = tipoNum * 1000 + score
 condicion  = baseOk AND svSubiendo AND haySenal AND score >= 90
 
-SCREENER[scoreOrden * condicion](tipoNum AS "Tipo", score AS "Score", azul AS "Azul", koncordeOk AS "KoncOk", sv AS "SV", mr AS "MR", filtro AS "Filtro", close AS "Precio", volRel AS "VolRel")
+volDolarHoy = Volume * close
+
+SCREENER[scoreOrden * condicion](tipoNum AS "Tipo", score AS "Score", azul AS "Azul", koncordeOk AS "KoncOk", sv AS "SV", mr AS "MR", filtro AS "Filtro", close AS "Precio", volDolarHoy AS "VolDolar$")
