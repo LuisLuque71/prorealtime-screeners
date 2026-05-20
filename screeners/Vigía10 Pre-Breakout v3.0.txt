@@ -1,0 +1,136 @@
+// ============================================================
+// SCREENER: Vigía10 Pre-Breakout v3.0
+// Penny/Micro stocks NYSE/NASDAQ - Daily
+// Filosofía: todo suma, nada bloquea. Los tipo 4 óptimos
+// flotan arriba; los débiles aparecen abajo pero no se descartan.
+// Tres capas: Vigía10 (momentum) + ATR squeeze + Koncorde (institucional)
+// ============================================================
+// DIFERENCIA CLAVE VS v2.0:
+//   v2.0 detectaba: cruce sv + compresión previa → breakout posible
+//   v3.0 detecta:   cruce sv + compresión + huella institucional → breakout real
+//   Sin Koncorde un tipoB puede ser pump de retail o squeeze que revierte.
+//   Con azulEnSoporte sabes que había acumulación institucional en la base.
+// ============================================================
+// CAMBIOS VS v2.0:
+//   [FIX] cPrecioSube: añade close > open — solo velas alcistas reales
+//     (antes permitía vela bajista que cerrara sobre el cierre previo)
+//   [NUEVO BLOQUE KONCORDE] sK1-sK4: scoring institucional puro
+//     sK3 azulEnSoporte (20pts): institucionales en la base — señal más valiosa
+//     sK4 divergenciaAlc (25pts): precio bajó pero azul subió = acumulación silenciosa
+//     sK1 azulPos (15pts): institucionales activos en el breakout
+//     sK2 azulGirando (12pts): azul sincronizado con sv al alza
+//   Koncorde NO bloquea ningún setup — "todo suma, nada bloquea"
+//   La jerarquía tipoNum * 1000 + score se conserva intacta
+// ============================================================
+// Ajuste si pocas señales: baja scoreMin a 75 o dolarVol a 1.5M
+// Ajuste si muchas señales: sube scoreMin a 110 o añade koncordeOk al gate
+// ============================================================
+
+// --- HARD GATES (precio, liquidez y vela alcista) ---
+volMedia20  = Average[20](Volume)
+dolarVol    = close * volMedia20
+cPrecioSube = close > close[1] AND close > open    // [FIX v3.0] vela alcista real
+baseOk      = close >= 1 AND close <= 10 AND dolarVol >= 2000000 AND cPrecioSube
+
+// --- VIGÍA10 ---
+ignored, ignored, ignored, ignored, ignored, ignored, sv, mr = CALL "Blai5 VIGIA 10"
+filtro = ExponentialAverage[50](sv)
+astro  = sv - mr
+
+// --- CONDICIONES BÁSICAS ---
+svSubiendo  = sv > sv[1] AND sv[1] > sv[2]
+svConFuerza = (sv - sv[1]) >= (sv[1] - sv[2])
+
+// --- COMPRESIÓN PREVIA (sv) ---
+amplitudReciente = Highest[5](sv) - Lowest[5](sv)
+amplitudPrevia   = Highest[15](sv[5]) - Lowest[15](sv[5])
+postSqueeze = amplitudPrevia <= 15 AND amplitudReciente >= amplitudPrevia * 1.2
+
+// --- SQUEEZE POR ATR ---
+atr14      = AverageTrueRange[14]
+atrMedio   = Average[20](atr14)
+atrSqueeze = atr14 < atrMedio * 0.85
+
+// --- TIPOS DE SEÑAL (sin cambios) ---
+tipoB = sv > 0 AND sv[3] <= 0 AND svSubiendo
+tipoA = sv < 0 AND sv > -5 AND sv > mr AND svSubiendo AND NOT tipoB
+tipoC = sv > 0 AND mr > 0 AND filtro > 0 AND NOT tipoB
+tipoD = filtro < 0 AND (filtro - filtro[3]) > (sv - sv[3]) AND filtro > filtro[3] AND sv < 0 AND svSubiendo AND NOT tipoA AND NOT tipoB
+
+haySenal = tipoA OR tipoB OR tipoC OR tipoD
+
+// --- SCORING BASE (tipo de señal) — sin cambios ---
+s1 = tipoB * 40 + tipoA * 25 + tipoC * 15 + tipoD * 10
+
+// --- SCORING VIGÍA (indicadores internos) — sin cambios ---
+s2 = (filtro > 0) * 15
+s3 = (astro > 0 AND astro[3] <= 0) * 15
+s4 = (mr > 0) * 10
+s5 = svConFuerza * 10
+s6 = (astro > 0) * 8
+s7 = (filtro > filtro[3]) * 5
+s8 = postSqueeze * 12
+
+// --- FRESCURA DEL CRUCE tipo 4 — sin cambios ---
+s9  = tipoB * (sv[1] <= 0) * 15
+s10 = tipoB * (sv[1] > 0 AND sv[2] <= 0) * 8
+
+// --- VOLUMEN RELATIVO — sin cambios ---
+volRel = Volume / Average[20](Volume)
+s11 = (volRel >= 1.5) * 15
+s12 = (volRel >= 1.2 AND volRel < 1.5) * 8
+
+// --- PRICE ACTION — sin cambios ---
+s13 = (close > open) * 8
+s14 = (close > Highest[10](close[1])) * 12
+
+// --- ATR SQUEEZE — sin cambios ---
+s15 = atrSqueeze * 10
+
+// ============================================================
+// BLOQUE KONCORDE — el diferenciador institucional
+// Scoring puro: todo suma, nunca bloquea
+// Distingue el breakout real (con acumulación) del pump de retail
+// ============================================================
+nvi    = NegativeVolumeIndex(close)
+nvim   = ExponentialAverage[3](nvi)
+nvimax = Highest[90](nvim)
+nvimin = Lowest[90](nvim)
+azul   = (nvi - nvim) * 100 / Max(nvimax - nvimin, 0.001)
+
+azulPos        = azul > 0
+azulGirando    = azul > azul[2]
+azulEnSoporte  = azul[2] > 0 OR azul[3] > 0 OR azul[4] > 0 OR azul[5] > 0 OR azul[6] > 0 OR azul[7] > 0 OR azul[8] > 0
+divergenciaAlc = azul > azul[3] AND close < close[3]
+koncordeOk     = azulPos OR azulGirando OR azulEnSoporte
+
+// [sK1] 15 pts — institucionales activos ahora en el breakout
+sK1 = azulPos * 15
+
+// [sK2] 12 pts — azul acelerando sincronizado con sv al alza
+sK2 = azulGirando * 12
+
+// [sK3] 20 pts — SEÑAL MÁS VALIOSA: azul positivo durante la base
+// Institucionales acumularon en silencio mientras el precio estaba comprimido
+// Cuando sv dispara con azulEnSoporte = breakout respaldado por acumulación real
+sK3 = azulEnSoporte * 20
+
+// [sK4] 25 pts — SEÑAL PREMIUM: precio bajó pero azul subió = acumulación silenciosa
+// Clásico Wyckoff: distribución aparente pero en realidad manos fuertes comprando
+// Más frecuente en tipoA y tipoD (fase pre-cruce donde precio aún está deprimido)
+sK4 = divergenciaAlc * 25
+
+// --- SCORE TOTAL ---
+score = s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14 + s15 + sK1 + sK2 + sK3 + sK4
+
+// --- TIPO LEGIBLE ---
+tipoNum = tipoB * 4 + tipoA * 3 + tipoC * 2 + tipoD * 1
+
+// --- CONDICIÓN FINAL ---
+// Jerarquía de tipos conservada: tipo 4 siempre sobre tipo 3, etc.
+// Koncorde eleva el score dentro de cada grupo — un tipoB con Koncorde
+// flota más alto que uno sin él, pero nunca invade el grupo superior
+scoreOrden = tipoNum * 1000 + score
+condicion  = baseOk AND svSubiendo AND haySenal AND score >= 90
+
+SCREENER[scoreOrden * condicion](tipoNum AS "Tipo", score AS "Score", azul AS "Azul", koncordeOk AS "KoncOk", sv AS "SV", mr AS "MR", filtro AS "Filtro", close AS "Precio", volRel AS "VolRel")
