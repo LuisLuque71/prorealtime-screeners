@@ -46,11 +46,11 @@ baseOk = close >= minPrice AND close <= maxPrice AND dolarVol >= minDolarVol AND
 // ================================================================
 // ANTI-PUMP ACTIVO — [FIX v2.0]
 // Excluye stocks que siguen subiendo hoy (pump todavía en marcha)
-// En premercado detecta los que ya llevan >20% de subida antes de abrir
+// En premercado detecta los que ya llevan >15% de subida antes de abrir
 // Estos son candidatos para MAÑANA, no para hoy
 // ================================================================
 movHoy    = (close - close[1]) / (close[1] + 0.001) * 100
-noEnPump  = movHoy <= 20
+noEnPump  = movHoy <= 15
 
 // ================================================================
 // DETECCIÓN DE PUMP RECIENTE
