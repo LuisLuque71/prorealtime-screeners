@@ -1,0 +1,248 @@
+// ============================================================
+// SCREENER: Trampa Alcista v3.2
+// Low Float NASDAQ/NYSE — Daily (uso habitual: premercado)
+// Objetivo: detectar post-pump en fase de distribución temprana → candidatos SHORT
+// Edge: serial offenders probados + Koncorde distribución + Vigía10 giro momentum
+//
+// FLUJO OPERATIVO OBLIGATORIO:
+//   1. Screener en premercado → watchlist de candidatos con distribución confirmada
+//   2. Validar en Finviz: float real, país, market cap, performance semanal
+//   3. Validar manualmente: ¿reverse split reciente? ¿offering SEC? ¿empresa basura?
+//   4. Verificar borrow disponible y coste en broker ANTES de cualquier posición
+//   5. La entrada real es intraday — esperar agotamiento + pérdida VWAP en apertura
+//   REGLA DE ORO: NUNCA shortear el pump vertical
+//
+// JERARQUÍA DE GATES (orden de importancia):
+//   1. hadCrash90  — PRIMARIA: solo serial offenders con crash >90% en 5-180 días
+//   2. hayDistribucion — Koncorde confirma salida institucional activa
+//   3. pumpFuerte + extendido + noTardio — detección del ciclo pump actual
+//   4. baseOk + noEnPump — filtros de precio/liquidez/timing
+//
+// CAMBIOS VS v3.1:
+//   [BUGFIX CRÍTICO] hadCrash90: bsCrash >= 5 AND bsCrash <= crashLookback
+//     En PRT, barssince() devuelve -1 cuando la condición nunca ocurrió.
+//     Como -1 <= 180 es TRUE, en v3.1 todos los stocks pasaban el gate sin
+//     haber tenido nunca un crash real. El resultado mostraba DiasUltCrash=-1
+//     en la casi totalidad de la lista — esos stocks eran ruido.
+//     Solo JIADE (64 días) y U POWER (37 días) tenían crash real confirmado.
+//     El bsCrash >= 5 excluye también crashes del mismo evento actual (< 5 días).
+//
+// AJUSTE DE SEÑALES:
+//   Pocas señales (esperado tras el fix) → bajar crashThreshold a 0.20 (crash >80%)
+//     o ampliar crashLookback a 270 días
+//   Si siguen siendo pocas → bajar scoreMin a 40 o pumpMinPct a 20
+// ============================================================
+
+// ---- PARÁMETROS AJUSTABLES ----
+minPrice        = 1
+maxPrice        = 20
+minDolarVol     = 1000000   // liquidez mínima (volumen premercado es bajo: filtrar a mano)
+pumpMinPct      = 30        // pump mínimo en últimos 5 días (%)
+scoreMin        = 50        // umbral de calidad combinada
+crashLookback   = 180       // días hacia atrás para buscar el crash histórico
+crashThreshold  = 0.10      // cierre debe ser < este % del máximo previo (0.10 = crash >90%)
+
+// ================================================================
+// GATE BASE — precio, liquidez, volatilidad
+// ================================================================
+volMedia20  = Average[20](Volume)
+dolarVol    = close * volMedia20
+atr14       = AverageTrueRange[14]
+atrRelativo = atr14 / (close + 0.001)
+
+baseOk = close >= minPrice AND close <= maxPrice AND dolarVol >= minDolarVol AND atrRelativo > 0.05
+
+// ================================================================
+// ANTI-PUMP ACTIVO
+// Excluye stocks subiendo >15% hoy — pump todavía en marcha en premercado
+// ================================================================
+movHoy   = (close - close[1]) / (close[1] + 0.001) * 100
+noEnPump = movHoy <= 15
+
+// ================================================================
+// HISTORIAL DE CRASH — GATE PRINCIPAL [BUGFIX v3.2]
+// Detecta un colapso >90% en 1-4 días en los últimos 5-180 días.
+//
+// crashBar: ¿cayó el cierre más del 90% respecto al máximo de los 4 cierres previos?
+// bsCrash:  barssince() — días desde el último crashBar
+//
+// BUGFIX: en v3.1 hadCrash90 = bsCrash <= 180 dejaba pasar todos los stocks
+// porque barssince() devuelve -1 si la condición nunca ocurrió, y -1 <= 180 = TRUE.
+// Corrección: exigir bsCrash >= 5 (excluye -1 y crashes dentro del evento actual).
+//
+// Resultado esperado: lista muy reducida — solo serial offenders reales.
+// Si hay pocas señales: aumentar crashThreshold a 0.20 (crash >80%)
+//                    o crashLookback a 270 días.
+// ================================================================
+crashBar   = Close < Highest[4](Close[1]) * crashThreshold
+bsCrash    = barssince(crashBar)
+hadCrash90 = bsCrash >= 5 AND bsCrash <= crashLookback
+
+// ================================================================
+// DETECCIÓN DE PUMP RECIENTE
+// ================================================================
+maxPump5 = Highest[5](High)
+
+// En serial offenders con crash reciente, close[5] puede ser el fondo post-crash
+// → pumpPct aparece muy alto (200-400%). Es señal válida: nuevo ciclo especulativo.
+pumpPct    = (maxPump5 - close[5]) / (close[5] + 0.001) * 100
+pumpFuerte = pumpPct >= pumpMinPct
+
+extendido = close > close[5]
+
+distDeMaximo = (maxPump5 - close) / (maxPump5 + 0.001) * 100
+noTardio     = distDeMaximo < 40   // serial offenders colapsan — 40% off peak ya es tarde
+
+volPumpMax = Highest[5](Volume) / (volMedia20 + 0.001)
+
+// ================================================================
+// BLOQUE KONCORDE — señales de distribución institucional
+// NVI no cambia en días de alto volumen (crash days) → cálculo fiable
+// para serial offenders aunque hayan tenido crashes recientes
+// ================================================================
+nvi    = NegativeVolumeIndex(close)
+nvim   = ExponentialAverage[3](nvi)
+nvimax = Highest[90](nvim)
+nvimin = Lowest[90](nvim)
+azul   = (nvi - nvim) * 100 / Max(nvimax - nvimin, 0.001)
+
+divergenciaBaj = azul < azul[3] AND close > close[3]
+azulAceleraBaj = azul < azul[1] AND azul[1] < azul[2] AND azul < 10
+azulBajoCero   = azul < 0
+
+hayDistribucion = divergenciaBaj OR azulAceleraBaj OR azulBajoCero
+
+// ================================================================
+// BLOQUE VIGÍA10 — giro de momentum
+// ================================================================
+ignored, ignored, ignored, ignored, ignored, SV, MR, ignored = CALL "Blai5 VIGIA 10"
+filtro = ExponentialAverage[20](SV)
+
+svBajando    = SV < SV[1] AND SV[1] < SV[2]
+crossSV0neg  = SV CROSSES UNDER 0
+bsSV0neg     = barssince(crossSV0neg)
+crossSVMRneg = SV CROSSES UNDER MR
+bsSVMRneg    = barssince(crossSVMRneg)
+
+// ================================================================
+// BLOQUE ICHIMOKU — deterioro estructural
+// ================================================================
+tenkan     = (Highest[9](High) + Lowest[9](Low)) / 2
+kijun      = (Highest[26](High) + Lowest[26](Low)) / 2
+ssa0       = (tenkan + kijun) / 2
+ssb0       = (Highest[52](High) + Lowest[52](Low)) / 2
+ssa        = ssa0[26]
+ssb        = ssb0[26]
+kumoBottom = Min(ssa, ssb)
+
+// ================================================================
+// SCORING CRASH — frescura del historial [desde v3.1]
+// Crash más reciente = patrón más fresco = retail más predispuesto al FOMO
+// ================================================================
+
+// [C1] 20 pts — Crash muy reciente (5-60 días) — mismo ciclo todavía activo
+sC1 = (bsCrash >= 5 AND bsCrash <= 60) * 20
+
+// [C2] 10 pts — Crash algo más antiguo (60-180 días) — patrón reconocible
+sC2 = (bsCrash > 60 AND bsCrash <= 180) * 10
+
+scoreC = sC1 + sC2   // máx teórico: 20
+
+// ================================================================
+// SCORING KONCORDE — distribución institucional
+// ================================================================
+
+// [K0] 35 pts — SEÑAL PREMIUM: distribución silenciosa pre-cruce
+sK0 = divergenciaBaj * 35
+
+// [K1] 20 pts — Azul cayendo 3 sesiones (azul < 10)
+sK1 = azulAceleraBaj * 20
+
+// [K2] 15 pts — Azul bajo cero (institucionales ya fuera)
+sK2 = azulBajoCero * 15
+
+// [K3] 10 pts — Azul bajo cero Y acelerando
+sK3 = (azulBajoCero AND azulAceleraBaj) * 10
+
+scoreK = sK0 + sK1 + sK2 + sK3   // máx teórico: 80
+
+// ================================================================
+// SCORING VIGÍA10 — flip de momentum bajista
+// ================================================================
+
+// [V1] 30 pts — SV cruza 0 hacia abajo
+sV1 = (bsSV0neg <= 3 AND SV < 0) * 30
+
+// [V2] 20 pts — SV cruza bajo MR (señal temprana)
+sV2 = (bsSVMRneg <= 5) * 20
+
+// [V3] 15 pts — SV negativo y cayendo
+sV3 = (SV < 0 AND svBajando) * 15
+
+// [V4] 10 pts — Filtro girando a la baja
+sV4 = (filtro < filtro[1] AND filtro < filtro[3]) * 10
+
+// [V5] 8 pts — SV < MR y filtro negativo
+sV5 = (SV < MR AND filtro < 0) * 8
+
+scoreV = sV1 + sV2 + sV3 + sV4 + sV5   // máx teórico: 83
+
+// ================================================================
+// SCORING ICHIMOKU — deterioro estructural de precio
+// ================================================================
+
+// [I1] 20 pts — Precio bajo la Kijun
+sI1 = (close < kijun) * 20
+
+// [I2] 10 pts — Precio bajo la Tenkan pero sobre Kijun
+sI2 = (close < tenkan AND close >= kijun) * 10
+
+// [I3] 8 pts — Nube bajista futura (SSB > SSA)
+sI3 = (ssb > ssa) * 8
+
+// [I4] 5 pts — Precio bajo la nube
+sI4 = (close < kumoBottom) * 5
+
+scoreI = sI1 + sI2 + sI3 + sI4   // máx teórico: 43
+
+// ================================================================
+// SCORING PUMP — calidad y extensión del pump detectado
+// ================================================================
+
+// [P1] 15 pts — Pump muy violento (>= 60% en 5 días)
+sP1 = (pumpPct >= 60) * 15
+
+// [P2] 8 pts — Pump moderado (30–60%)
+sP2 = (pumpPct >= pumpMinPct AND pumpPct < 60) * 8
+
+// [P3] 12 pts — Precio extremadamente extendido sobre media de 20 días
+sP3 = (close > Average[20](close) * 1.5) * 12
+
+// [P4] 8 pts — Moderadamente extendido sobre media
+sP4 = (close > Average[20](close) * 1.2 AND close <= Average[20](close) * 1.5) * 8
+
+// [P5] 12 pts — Volatilidad extrema (ATR relativo > 10%)
+sP5 = (atrRelativo > 0.10) * 12
+
+// [P6] 6 pts — Volatilidad alta (ATR 5–10%)
+sP6 = (atrRelativo > 0.05 AND atrRelativo <= 0.10) * 6
+
+// [P7] 10 pts — Inicio de caída desde el techo (10–30% desde el máximo)
+sP7 = (distDeMaximo >= 10 AND distDeMaximo < 30) * 10
+
+// [P8] 15 pts — Pump con volumen explosivo (>= 5x media 20 días)
+sP8 = (volPumpMax >= 5) * 15
+
+// [P9] 8 pts — Pump con volumen elevado (2x–5x media)
+sP9 = (volPumpMax >= 2 AND volPumpMax < 5) * 8
+
+scoreP = sP1 + sP2 + sP3 + sP4 + sP5 + sP6 + sP7 + sP8 + sP9   // máx teórico: 94
+
+// ================================================================
+// SCORE FINAL Y CONDICIÓN
+// ================================================================
+score = scoreC + scoreK + scoreV + scoreI + scoreP   // máx teórico: 320
+
+condicion = hadCrash90 AND hayDistribucion AND pumpFuerte AND extendido AND noTardio AND baseOk AND noEnPump AND score >= scoreMin
+
+SCREENER[score * condicion](score AS "Score", bsCrash AS "DiasUltCrash", pumpPct AS "Pump%", distDeMaximo AS "DistMax%", movHoy AS "Hoy%", divergenciaBaj AS "DivBaj", azul AS "Azul", SV AS "SV", scoreK AS "ScoreK", scoreV AS "ScoreV", close AS "Precio", dolarVol AS "DolarVol")
